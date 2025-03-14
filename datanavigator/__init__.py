@@ -9,6 +9,7 @@ Classes:
     PlotBrowser - Scroll through an array of complex data where a plotting function is defined for each element.
     VideoBrowser - Scroll through the frames of a video.
     VideoPlotBrowser - Browse through video and 1D signals synced to the video side by side.
+    ComponentBrowser - Browse signals (e.g. from periodic motion) as scatterplots of components (e.g. from UMAP, PCA).
     
     Button - Custom button widget with a 'name' state.
     StateButton - Button widget that stores a number/coordinate state.
@@ -57,6 +58,7 @@ from .assets import (
     StateVariables,
     ToggleButton,
 )
+from .components import ComponentBrowser
 from .core import (
     GenericBrowser,
     PlotBrowser,
