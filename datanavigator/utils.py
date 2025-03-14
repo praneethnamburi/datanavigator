@@ -1,73 +1,136 @@
+"""Utility functions and classes for video processing and plotting.
 
+This module provides various utility functions and classes to assist with
+video processing, plotting, and other miscellaneous tasks.
 """
-TextView - Show text array line by line.
-    _parse_fax - Helper function to parse figure or axes.
-    _parse_pos - Helper function to parse position strings.
-get_palette - Get a color palette, with fallback if seaborn is not available.
-"""
+
 from __future__ import annotations
 
-import os
-import sys
 import errno
+import os
 import subprocess
+import sys
 from pathlib import Path
+from typing import List, Tuple, Union
 
 import cv2 as cv
 import numpy as np
 import portion as P
-from decord import VideoReader
+from decord import VideoReader, cpu
 from matplotlib import axes as maxes
 from matplotlib import pyplot as plt
 
-def ticks_from_times(times, tick_lim):
-    """Generate x, y arrays to supply to plt.plot function to plot a set of x-values (times) as ticks."""
-    def nan_pad_x(inp):
-            return [item for x in inp for item in (x, x, np.nan)]
-    def nan_pad_y(ylim, n):
-        return [item for y1, y2 in [ylim]*n for item in (y1, y2, np.nan)]
+
+def ticks_from_times(
+    times: List[float], tick_lim: Tuple[float, float]
+) -> Tuple[List[float], List[float]]:
+    """Generate x, y arrays to supply to plt.plot function to plot a set of x-values (times) as ticks.
+
+    Args:
+        times (List[float]): List of time values.
+        tick_lim (Tuple[float, float]): Limits for the y-axis ticks.
+
+    Returns:
+        Tuple[List[float], List[float]]: x and y arrays for plotting ticks.
+    """
+
+    def nan_pad_x(inp: List[float]) -> List[float]:
+        return [item for x in inp for item in (x, x, np.nan)]
+
+    def nan_pad_y(ylim: Tuple[float, float], n: int) -> List[float]:
+        return [item for y1, y2 in [ylim] * n for item in (y1, y2, np.nan)]
+
     return nan_pad_x(times), nan_pad_y(tick_lim, len(times))
 
-def find_nearest(x, y):
-    """
-    Find the nearest x-values for every value in y.
-    x and y are expected to be lists of floats.
+
+def find_nearest(x: List[float], y: List[float]) -> List[float]:
+    """Find the nearest x-values for every value in y.
+
+    Args:
+        x (List[float]): List of x-values.
+        y (List[float]): List of y-values.
+
     Returns:
-        List with the same number of values as y, but each value is the closest value in x.
+        List[float]: List with the same number of values as y, but each value is the closest value in x.
     """
     x = np.asarray(x)
     y = np.asarray(y)
     return [x[np.argmin(np.abs(x - yi))] for yi in y]
 
-class List(list):
-    def next(self, val):
-        """Next element in the list closest to val."""
+
+class _List(list):
+    """Extended list with additional methods to find next and previous elements."""
+
+    def next(self, val: float) -> float:
+        """Next element in the list closest to val.
+
+        Args:
+            val (float): Value to find the next element for.
+
+        Returns:
+            float: Next element in the list closest to val.
+        """
         return min([x for x in self if x > val], default=max(self))
-    
-    def previous(self, val):
-        """Previous element in the list closest to val."""
+
+    def previous(self, val: float) -> float:
+        """Previous element in the list closest to val.
+
+        Args:
+            val (float): Value to find the previous element for.
+
+        Returns:
+            float: Previous element in the list closest to val.
+        """
         return max([x for x in self if x < val], default=min(self))
 
-# extend portion functionality in the class below
+
 class _PNInterval(P.Interval):
+    """Extended portion Interval class with additional properties."""
+
     @property
-    def atomic_durations(self):
+    def atomic_durations(self) -> List[float]:
+        """List of atomic durations in the event. In this case, an atom is one interval with start and end times.
+
+        Returns:
+            List[float]: Atomic durations.
+        """
         return [xi.upper - xi.lower for xi in self]
-    
+
     @property
-    def duration(self):
+    def duration(self) -> float:
+        """Total duration (sum of atomic durations) of the interval.
+
+        Returns:
+            float: Total duration.
+        """
         return sum(self.atomic_durations)
-    
+
     @property
-    def fraction(self):
-        # fractional duration relative to the enclosure
-        return self.duration/self.enclosure.duration
-    
+    def fraction(self) -> float:
+        """Fractional duration relative to the enclosure.
+
+        Returns:
+            float: Fractional duration.
+        """
+        return self.duration / self.enclosure.duration
+
+
 portion = P.create_api(_PNInterval)
 
 
-# TextView and supporting functions
-def _parse_fax(fax, ax_pos=(0.01, 0.01, 0.98, 0.98)):
+def _parse_fax(
+    fax: Union[None, plt.Figure, maxes.Axes],
+    ax_pos: Tuple[float, float, float, float] = (0.01, 0.01, 0.98, 0.98),
+) -> Tuple[plt.Figure, maxes.Axes]:
+    """Helper function to parse figure and axes.
+
+    Args:
+        fax (Union[None, plt.Figure, maxes.Axes]): Figure or axes handle.
+        ax_pos (Tuple[float, float, float, float], optional): Position of the axes. Defaults to (0.01, 0.01, 0.98, 0.98).
+
+    Returns:
+        Tuple[plt.Figure, maxes.Axes]: Parsed figure and axes.
+    """
     assert isinstance(fax, (type(None), plt.Figure, maxes.Axes))
     if fax is None:
         f = plt.figure()
@@ -80,61 +143,111 @@ def _parse_fax(fax, ax_pos=(0.01, 0.01, 0.98, 0.98)):
         ax = fax
     return f, ax
 
-def _parse_pos(pos):
+
+def _parse_pos(
+    pos: Union[str, Tuple[float, float, str, str]]
+) -> Tuple[float, float, str, str]:
+    """Helper function to parse position strings.
+
+    Args:
+        pos (Union[str, Tuple[float, float, str, str]]): Position string or tuple.
+
+    Returns:
+        Tuple[float, float, str, str]: Parsed position.
+    """
     if isinstance(pos, str):
-        updown, leftright = pos.replace('middle', 'center').split(' ')
-        assert updown in ('top', 'center', 'bottom')
-        assert leftright in ('left', 'center', 'right')
-        y = {'top': 1, 'center': 0.5, 'bottom': 0}[updown]
-        x = {'left': 0, 'center': 0.5, 'right': 1}[leftright]
+        updown, leftright = pos.replace("middle", "center").split(" ")
+        assert updown in ("top", "center", "bottom")
+        assert leftright in ("left", "center", "right")
+        y = {"top": 1, "center": 0.5, "bottom": 0}[updown]
+        x = {"left": 0, "center": 0.5, "right": 1}[leftright]
         pos = (x, y, updown, leftright)
     assert len(pos) == 4
     return pos
 
+
 class TextView:
-    """Show text array line by line"""
-    def __init__(self, text, fax=None, pos='bottom left'):
+    """Show text array line by line."""
+
+    def __init__(
+        self,
+        text: Union[List[str], dict],
+        fax: Union[None, plt.Figure, maxes.Axes] = None,
+        pos: Union[str, Tuple[float, float, str, str]] = "bottom left",
+    ):
         """
-        text is an array of strings
-        fax is either a figure or an axis handle
+        Args:
+            text (Union[List[str], dict]): Array of strings or dictionary to display.
+            fax (Union[None, plt.Figure, maxes.Axes], optional): Figure or axes handle. Defaults to None.
+            pos (Union[str, Tuple[float, float, str, str]], optional): Position of the text. Defaults to "bottom left".
         """
-        def rescale(xy, margin=0.03):
-            return (1-2*margin)*xy + margin
+
+        def rescale(xy: float, margin: float = 0.03) -> float:
+            return (1 - 2 * margin) * xy + margin
 
         self.text = self.parse_text(text)
-        self._text = None # matplotlib text object
+        self._text = None  # matplotlib text object
         self._pos = _parse_pos(pos)
-        self.figure, self._ax = _parse_fax(fax, ax_pos=(rescale(self._pos[0]), rescale(self._pos[1]), 0.02, 0.02))
+        self.figure, self._ax = _parse_fax(
+            fax, ax_pos=(rescale(self._pos[0]), rescale(self._pos[1]), 0.02, 0.02)
+        )
         self.setup()
         self.update()
-    
-    def parse_text(self, text):
+
+    def parse_text(self, text: Union[List[str], dict]) -> List[str]:
+        """Parse text input into a list of strings.
+
+        Args:
+            text (Union[List[str], dict]): Text input.
+
+        Returns:
+            List[str]: Parsed text.
+        """
         if isinstance(text, dict):
-            text = [f'{key} - {val}' for key, val in text.items()] 
+            text = [f"{key} - {val}" for key, val in text.items()]
         return text
 
-    def setup(self):
-        self._ax.axis('off')
+    def setup(self) -> None:
+        """Setup for showing the text."""
+        self._ax.axis("off")
         plt.show(block=False)
 
-    def update(self, new_text=None):
+    def update(self, new_text: Union[List[str], dict] = None) -> None:
+        """Update the text view with new text.
+
+        Args:
+            new_text (Union[List[str], dict], optional): New text to display. Defaults to None.
+        """
         if new_text is not None:
             self.text = self.parse_text(new_text)
         if self._text is not None:
             self._text.remove()
         x, y, va, ha = self._pos
-        self._text = self._ax.text(x, y, '\n'.join(self.text), va=va, ha=ha, family='monospace')
+        self._text = self._ax.text(
+            x, y, "\n".join(self.text), va=va, ha=ha, family="monospace"
+        )
         plt.draw()
 
 
-# attached to VideoAnnotation
-def get_palette(palette_name='Set2', n_colors=10):
-    try: # remove seaborn dependency by manually specifying a color palette
+def get_palette(
+    palette_name: str = "Set2", n_colors: int = 10
+) -> List[Tuple[float, float, float]]:
+    """Get a color palette, with fallback if seaborn is not available.
+
+    Args:
+        palette_name (str, optional): Name of the palette. Defaults to "Set2".
+        n_colors (int, optional): Number of colors. Defaults to 10.
+
+    Returns:
+        List[Tuple[float, float, float]]: List of RGB tuples.
+    """
+    try:
         import seaborn as sns
+
         return sns.color_palette(palette_name, n_colors=n_colors)
     except ModuleNotFoundError:
         palettes = {
-            'Set2': [ # seaborn set 2
+            "Set2": [
                 (0.40, 0.76, 0.65),
                 (0.99, 0.55, 0.38),
                 (0.55, 0.63, 0.79),
@@ -144,58 +257,97 @@ def get_palette(palette_name='Set2', n_colors=10):
                 (0.90, 0.77, 0.58),
                 (0.70, 0.70, 0.70),
                 (0.40, 0.76, 0.65),
-                (0.99, 0.55, 0.38)
-            ]}
+                (0.99, 0.55, 0.38),
+            ]
+        }
         return palettes[palette_name][:n_colors]
 
 
+def is_video(vid_file: str, verbose: bool = False) -> bool:
+    """Check if a file is a video file.
 
-def is_video(vid_file:str, verbose=False) -> bool: # Refactored from pntools.video.is_video
-    """Check if a file is a video file."""
-    codec_types = subprocess.getoutput(f'ffprobe -loglevel error -show_entries stream=codec_type -of default=nw=1 "{vid_file}"')
+    Args:
+        vid_file (str): Path to the video file.
+        verbose (bool, optional): If True, print additional information. Defaults to False.
+
+    Returns:
+        bool: True if the file is a video file, False otherwise.
+    """
+    codec_types = subprocess.getoutput(
+        f'ffprobe -loglevel error -show_entries stream=codec_type -of default=nw=1 "{vid_file}"'
+    )
     if verbose:
         my_print = print
     else:
-        my_print = lambda x:None
+        my_print = lambda x: None
 
     ret = False
-    if 'Invalid data' in codec_types:
-        my_print('Not an audio or video file')
-    if 'codec_type=video' in codec_types:
+    if "Invalid data" in codec_types:
+        my_print("Not an audio or video file")
+    if "codec_type=video" in codec_types:
         ret = True
-        my_print('Video stream found')
-    if 'codec_type=audio' in codec_types:
-        my_print('Audio stream found')
+        my_print("Video stream found")
+    if "codec_type=audio" in codec_types:
+        my_print("Audio stream found")
     return ret
 
 
 class Video(VideoReader):
-    def __init__(self, uri, ctx=cpu(0), width=-1, height=-1, num_threads=0, fault_tol=-1):
+    """Extended VideoReader class with additional methods."""
+
+    def __init__(
+        self,
+        uri: str,
+        ctx=cpu(0),
+        width: int = -1,
+        height: int = -1,
+        num_threads: int = 0,
+        fault_tol: int = -1,
+    ):
+        """
+        Args:
+            uri (str): Path to the video file.
+            ctx: Context for video decoding. Defaults to cpu(0).
+            width (int, optional): Width of the video. Defaults to -1.
+            height (int, optional): Height of the video. Defaults to -1.
+            num_threads (int, optional): Number of threads for decoding. Defaults to 0.
+            fault_tol (int, optional): Fault tolerance. Defaults to -1.
+        """
         assert os.path.exists(uri) and is_video(uri)
         self.fname = uri
         self.name = Path(uri).stem
         super().__init__(uri, ctx, width, height, num_threads, fault_tol)
 
-    def gray(self, frame_num: int):
+    def gray(self, frame_num: int) -> np.ndarray:
+        """Convert a frame to grayscale.
+
+        Args:
+            frame_num (int): Frame number to convert.
+
+        Returns:
+            np.ndarray: Grayscale frame.
+        """
         return cv.cvtColor(self[frame_num].asnumpy(), cv.COLOR_BGR2GRAY)
+
 
 ### ------- FROM STACK OVERFLOW
 # Sadly, Python fails to provide the following magic number for us.
 ERROR_INVALID_NAME = 123
-'''
+"""
 Windows-specific error code indicating an invalid pathname.
 
 See Also
 ----------
 https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-
     Official listing of all such codes.
-'''
+"""
+
 
 def is_pathname_valid(pathname: str) -> bool:
-    '''
+    """
     `True` if the passed pathname is a valid pathname for the current OS;
     `False` otherwise.
-    '''
+    """
     # If this pathname is either not a string or is but is empty, this pathname
     # is invalid.
     try:
@@ -211,9 +363,12 @@ def is_pathname_valid(pathname: str) -> bool:
         # Directory guaranteed to exist. If the current OS is Windows, this is
         # the drive to which Windows was installed (e.g., the "%HOMEDRIVE%"
         # environment variable); else, the typical root directory.
-        root_dirname = os.environ.get('HOMEDRIVE', 'C:') \
-            if sys.platform == 'win32' else os.path.sep
-        assert os.path.isdir(root_dirname)   # ...Murphy and her ironclad Law
+        root_dirname = (
+            os.environ.get("HOMEDRIVE", "C:")
+            if sys.platform == "win32"
+            else os.path.sep
+        )
+        assert os.path.isdir(root_dirname)  # ...Murphy and her ironclad Law
 
         # Append a path separator to this directory if needed.
         root_dirname = root_dirname.rstrip(os.path.sep) + os.path.sep
@@ -242,7 +397,7 @@ def is_pathname_valid(pathname: str) -> bool:
             #   * Under most POSIX-compatible OSes, "ENAMETOOLONG".
             #   * Under some edge-case OSes (e.g., SunOS, *BSD), "ERANGE".
             except OSError as exc:
-                if hasattr(exc, 'winerror'):
+                if hasattr(exc, "winerror"):
                     if exc.winerror == ERROR_INVALID_NAME:
                         return False
                 elif exc.errno in {errno.ENAMETOOLONG, errno.ERANGE}:
@@ -260,32 +415,36 @@ def is_pathname_valid(pathname: str) -> bool:
     #
     # Did we mention this should be shipped with Python already?
 
+
 def is_path_creatable(pathname: str) -> bool:
-    '''
+    """
     `True` if the current user has sufficient permissions to create the passed
     pathname; `False` otherwise.
-    '''
+    """
     # Parent directory of the passed path. If empty, we substitute the current
     # working directory (CWD) instead.
     dirname = os.path.dirname(pathname) or os.getcwd()
     return os.access(dirname, os.W_OK)
 
+
 def is_path_exists_or_creatable(pathname: str) -> bool:
-    '''
+    """
     `True` if the passed pathname is a valid pathname for the current OS _and_
     either currently exists or is hypothetically creatable; `False` otherwise.
 
     This function is guaranteed to _never_ raise exceptions.
-    '''
+    """
     try:
         # To prevent "os" module calls from raising undesirable exceptions on
         # invalid pathnames, is_pathname_valid() is explicitly called first.
         return is_pathname_valid(pathname) and (
-            os.path.exists(pathname) or is_path_creatable(pathname))
+            os.path.exists(pathname) or is_path_creatable(pathname)
+        )
     # Report failure on non-fatal filesystem complaints (e.g., connection
     # timeouts, permissions issues) implying this path to be inaccessible. All
     # other exceptions are unrelated fatal issues and should not be caught here.
     except OSError:
         return False
-    
+
+
 ### ------- END FROM STACK OVERFLOW

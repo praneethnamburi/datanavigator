@@ -35,11 +35,51 @@ Functions:
     lucas_kanade_rstc - Track points in a video using Lucas-Kanade with reverse sigmoid tracking correction.
     test_lucas_kanade_rstc - Test function for Lucas-Kanade with reverse sigmoid tracking correction.
 
-Constants:
-    CLIP_FOLDER - Default folder for storing video clips.
-
 External requirements:
     `ffprobe` - Required for Video class to get video information.
 """
+import os
+from ._config import (
+    get_cache_folder,
+    get_clip_folder,
+    set_cache_folder,
+    set_clip_folder,
+)
+from .assets import (
+    AssetContainer,
+    Button,
+    Buttons,
+    MemorySlots,
+    Selector,
+    Selectors,
+    StateButton,
+    StateVariable,
+    StateVariables,
+    ToggleButton,
+)
+from .core import (
+    GenericBrowser,
+    PlotBrowser,
+    SignalBrowser,
+    VideoBrowser,
+    VideoPlotBrowser,
+)
+from .events import Event, EventData, Events
+from .opticalflow import lucas_kanade, lucas_kanade_rstc
+from .pointtracking import VideoAnnotation, VideoAnnotations, VideoPointAnnotator
+from .utils import (
+    TextView,
+    Video,
+    find_nearest,
+    get_palette,
+    is_path_exists_or_creatable,
+    is_video,
+    portion,
+    ticks_from_times,
+)
 
-from ._config import set_clip_folder, get_clip_folder, set_cache_folder, get_cache_folder
+if not os.path.exists(get_clip_folder()):
+    folder = os.getcwd()
+    print(f"Using the current working directory-{folder}-for storing video clips.")
+    set_clip_folder(folder)
+    print("To change, use datanavigator.set_clip_folder(<folder_name>)")
