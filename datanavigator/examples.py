@@ -147,6 +147,17 @@ class SelectorDemo:
         self.lasso.disconnect_events()
 
 
+# ComponentBrowser
+    # import projects.gaitmusic as gm
+    # mr = gm.MusicRunning01()
+    # lf = mr(10).ot
+    # sig_pieces = gm.gait_phase_analysis(lf, muscle_line_name='RSBL_Upper', target_samples=500)
+    # gui.ComponentBrowser(sig_pieces)
+
+    # Single-click on scatter plots to select a gait cycle.
+    # Press r to refresh 'recent history' plots.
+    # Double click on the time course plot to select a gait cycle from the time series plot.
+
 class SignalBrowserKeyPress(SignalBrowser):
     """This demonstrates the old way of handling key press events in SignalBrowser. See :py:class:`EventPicker` for the new way."""
 

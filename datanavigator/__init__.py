@@ -7,7 +7,7 @@ Classes:
     GenericBrowser - Generic class to browse data. Meant to be extended.
     SignalBrowser - Browse an array of pysampled.Data elements, or 2D arrays.
     PlotBrowser - Scroll through an array of complex data where a plotting function is defined for each element.
-    VideoBrowser - Scroll through images of a video.
+    VideoBrowser - Scroll through the frames of a video.
     VideoPlotBrowser - Browse through video and 1D signals synced to the video side by side.
     
     Button - Custom button widget with a 'name' state.
