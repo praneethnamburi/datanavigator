@@ -10,6 +10,8 @@ Classes:
 """
 
 import os
+import urllib.request
+import tempfile
 from pathlib import Path
 from typing import Callable, Optional, Any
 
@@ -19,10 +21,25 @@ import pysampled
 from matplotlib.widgets import LassoSelector as LassoSelectorWidget
 
 from . import _config
-from .core import Buttons, SignalBrowser
+from .core import Buttons
+from .signals import SignalBrowser
 
 
-class EventPicker(SignalBrowser):
+def get_example_video(url: str=None) -> str:
+    """Download a sample video and return the path to that video."""
+    if url is None:
+        url = "https://test-videos.co.uk/vids/jellyfish/mp4/h264/720/Jellyfish_720_10s_2MB.mp4"
+
+    with urllib.request.urlopen(url) as response:
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_file:
+            temp_file.write(response.read())
+            temp_video_path = temp_file.name
+
+    print(f"Downloaded video to: {temp_video_path}")
+    return temp_video_path
+
+
+class EventPickerDemo(SignalBrowser):
     """
     A class demonstrating how to browse 10 (white noise) signals and pick events of different sizes.
     It demonstrates how to extend :py:class:`datanavigator.SignalBrowser`.

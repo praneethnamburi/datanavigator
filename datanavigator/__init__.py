@@ -1,7 +1,5 @@
 """
-Simple Graphical User Interface elements for browsing data.
-
-This module provides classes and functions to create and manage graphical user interfaces for browsing and interacting with various types of data, including signals, plots, and videos. It includes support for event handling, and data visualization.
+Interactive data visualization for signals, videos, and complex data objects.
 
 Classes:
     GenericBrowser - Generic class to browse data. Meant to be extended.
@@ -40,6 +38,9 @@ External requirements:
     `ffprobe` - Required for Video class to get video information.
 """
 import os
+import sys
+import shutil
+
 from ._config import (
     get_cache_folder,
     get_clip_folder,
@@ -80,6 +81,40 @@ from .utils import (
     ticks_from_times,
 )
 
+from .examples import (
+    get_example_video, 
+    EventPickerDemo, 
+    ButtonDemo, 
+    SelectorDemo, 
+)
+
+def check_ffmpeg():
+    def check_command(command):
+        """Check if a command is available in the system's PATH."""
+        return shutil.which(command) is not None
+
+    def print_install_instructions():
+        """Print installation instructions for ffmpeg and ffprobe."""
+        if sys.platform.startswith("win"):
+            print("\nFFmpeg is not installed or not in PATH.")
+            print("Download it from: https://ffmpeg.org/download.html")
+            print("After installation, add FFmpeg's 'bin' folder to the system PATH.")
+        else:
+            print("\nFFmpeg is not installed or not in PATH.")
+            print("On Debian/Ubuntu, install it with: sudo apt install ffmpeg")
+            print("On macOS, install it with: brew install ffmpeg")
+            print("On Fedora, install it with: sudo dnf install ffmpeg")
+            print("On Arch Linux, install it with: sudo pacman -S ffmpeg")
+
+    # Check if ffmpeg and ffprobe are available
+    ffmpeg_found = check_command("ffmpeg")
+    ffprobe_found = check_command("ffprobe")
+
+    if not (ffmpeg_found and ffprobe_found):
+        print("One or both of FFmpeg and FFprobe are missing.")
+        print_install_instructions()
+
+        
 if not os.path.exists(get_clip_folder()):
     folder = os.getcwd()
     print(f"Using the current working directory-{folder}-for storing video clips.")
