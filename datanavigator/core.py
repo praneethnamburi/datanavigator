@@ -1,5 +1,10 @@
 """
-This module provides classes for browsing and interacting with various types of data, including generic data, plots, signals, and videos.
+This module defines the core class called :py:class:`GenericBrowser`. It
+defines basic functionalities for browsing data, such as navigating
+using arrow keys, storing positions in memory (e.g. video frame
+numbers), adding buttons, and assigning hotkeys to custom functions.
+This class can be extended to create interactive browsers for various
+types of data, including plots, signals, and videos.
 """
 
 from __future__ import annotations
@@ -10,7 +15,6 @@ import os
 from datetime import datetime, timedelta
 
 import matplotlib as mpl
-import numpy as np
 import pysampled
 from decord import VideoReader
 from matplotlib import axes as maxes
@@ -24,7 +28,7 @@ from .events import Events
 
 class GenericBrowser:
     """
-    Generic class to browse data. Meant to be extended before use.
+    Generic class that defines base functionality. Meant to be extended before use.
 
     Features:
         - Navigate using arrow keys.
