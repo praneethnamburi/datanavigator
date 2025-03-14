@@ -58,17 +58,17 @@ from .assets import (
     StateVariables,
     ToggleButton,
 )
-from .components import ComponentBrowser
-from .core import (
-    GenericBrowser,
-    PlotBrowser,
-    SignalBrowser,
-    VideoBrowser,
-    VideoPlotBrowser,
-)
 from .events import Event, EventData, Events
+
+from .core import GenericBrowser
+from .plots import PlotBrowser
+from .signals import SignalBrowser
+from .videos import VideoBrowser, VideoPlotBrowser
+from .components import ComponentBrowser
+
 from .opticalflow import lucas_kanade, lucas_kanade_rstc
 from .pointtracking import VideoAnnotation, VideoAnnotations, VideoPointAnnotator
+
 from .utils import (
     TextView,
     Video,
