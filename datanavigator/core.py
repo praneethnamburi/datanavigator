@@ -1,3 +1,7 @@
+"""
+This module provides classes for browsing and interacting with various types of data, including generic data, plots, signals, and videos.
+"""
+
 from __future__ import annotations
 
 import inspect
@@ -23,25 +27,32 @@ PLOT_COLORS = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 class GenericBrowser:
     """
     Generic class to browse data. Meant to be extended before use.
+
     Features:
-        Navigate using arrow keys.
-        Store positions in memory using number keys (e.g. for flipping between positions when browsing a video).
-        Quickly add toggle and push buttons.
-        Design custom functions and assign hotkeys to them (add_key_binding)
+        - Navigate using arrow keys.
+        - Store positions in memory using number keys (e.g. for flipping between positions when browsing a video).
+        - Quickly add toggle and push buttons.
+        - Design custom functions and assign hotkeys to them (add_key_binding).
 
     Default Navigation (arrow keys):
-        ctrl+k      - show all keybindings
-        right       - forward one frame
-        left        - back one frame
-        up          - forward 10 frames
-        down        - back 10 frames
-        shift+left  - first frame
-        shift+right - last frame
-        shift+up    - forward nframes/20 frames
-        shift+down  - back nframes/20 frames
+        - ctrl+k      - show all keybindings
+        - right       - forward one frame
+        - left        - back one frame
+        - up          - forward 10 frames
+        - down        - back 10 frames
+        - shift+left  - first frame
+        - shift+right - last frame
+        - shift+up    - forward nframes/20 frames
+        - shift+down  - back nframes/20 frames
     """
 
-    def __init__(self, figure_handle=None):
+    def __init__(self, figure_handle: plt.Figure = None):
+        """
+        Initialize the GenericBrowser.
+
+        Args:
+            figure_handle (plt.Figure, optional): Matplotlib figure handle. Defaults to None.
+        """
         if figure_handle is None:
             figure_handle = plt.figure()
         assert isinstance(figure_handle, plt.Figure)
@@ -65,6 +76,7 @@ class GenericBrowser:
         self.cid.append(self.figure.canvas.mpl_connect("close_event", self))
 
     def update_assets(self):
+        """Update the display of various assets."""
         if self.has("memoryslots"):
             self.memoryslots.update_display()
         if self.has("events"):
@@ -72,17 +84,31 @@ class GenericBrowser:
         if self.has("statevariables"):
             self.statevariables.update_display()
 
-    def update(
-        self, event=None
-    ):  # extended classes are expected to implement their update function!
+    def update(self, event=None):
+        """
+        Update the browser. Extended classes are expected to implement their update function.
+
+        Args:
+            event (optional): Event that triggered the update. Defaults to None.
+        """
         self.update_assets()
 
     def update_without_clear(self, event=None):
-        self.update_assets()
-        # I did this for browsers that clear the axis each time! Those classes will need to re-implement this method
+        """
+        Update the browser without clearing the axis.
 
-    def mpl_remove_bindings(self, key_list):
-        """If the existing key is bound to something in matplotlib, then remove it"""
+        Args:
+            event (optional): Event that triggered the update. Defaults to None.
+        """
+        self.update_assets()
+
+    def mpl_remove_bindings(self, key_list: list[str]):
+        """
+        Remove existing key bindings in matplotlib.
+
+        Args:
+            key_list (list[str]): List of keys to remove bindings for.
+        """
         for key in key_list:
             this_param_name = [
                 k for k, v in mpl.rcParams.items() if isinstance(v, list) and key in v
@@ -94,7 +120,12 @@ class GenericBrowser:
                 self._bindings_removed[this_param_name] = key
 
     def __call__(self, event):
-        # print(event.__dict__) # for debugging
+        """
+        Handle events.
+
+        Args:
+            event: Event to handle.
+        """
         if event.name == "key_press_event":
             if event.key in self._keypressdict:
                 f = self._keypressdict[event.key][0]
@@ -115,7 +146,7 @@ class GenericBrowser:
         self.mpl_restore_bindings()
 
     def mpl_restore_bindings(self):
-        """Restore any modified default keybindings in matplotlib"""
+        """Restore any modified default keybindings in matplotlib."""
         for param_name, key in self._bindings_removed.items():
             if key not in mpl.rcParams[param_name]:
                 mpl.rcParams[param_name].append(
@@ -127,24 +158,28 @@ class GenericBrowser:
         if hasattr(self, "data"):  # otherwise returns None
             return len(self.data)
 
-    def reset_axes(
-        self, axis="both", event=None
-    ):  # event in case it is used as a callback function
-        """Reframe data within matplotlib axes."""
+    def reset_axes(self, axis: str = "both", event=None):
+        """
+        Reframe data within matplotlib axes.
+
+        Args:
+            axis (str, optional): Axis to reset. Defaults to "both".
+            event (optional): Event that triggered the reset. Defaults to None.
+        """
         for ax in self.figure.axes:
             if isinstance(ax, maxes.SubplotBase):
                 ax.relim()
                 ax.autoscale(axis=axis)
         plt.draw()
 
-    ## select plots
-
-    # Event responses - useful to pair with add_key_binding
-    # These capabilities can be assigned to different key bindings
-    def add_key_binding(self, key_name, on_press_function, description=None):
+    def add_key_binding(self, key_name: str, on_press_function: callable, description: str = None):
         """
-        This is useful to add key-bindings in classes that inherit from this one, or on the command line.
-        See usage in the __init__ function
+        Add key bindings to the browser.
+
+        Args:
+            key_name (str): Key to bind.
+            on_press_function (callable): Function to call when the key is pressed.
+            description (str, optional): Description of the key binding. Defaults to None.
         """
         if description is None:
             description = on_press_function.__name__
@@ -152,6 +187,7 @@ class GenericBrowser:
         self._keypressdict[key_name] = (on_press_function, description)
 
     def set_default_keybindings(self):
+        """Set default key bindings for navigation."""
         self.add_key_binding("left", self.decrement)
         self.add_key_binding("right", self.increment)
         self.add_key_binding(
@@ -202,34 +238,63 @@ class GenericBrowser:
         )
         self.add_key_binding("r", self.reset_axes)
 
-    def increment(self, step=1):
+    def increment(self, step: int = 1):
+        """
+        Increment the current index.
+
+        Args:
+            step (int, optional): Number of steps to increment. Defaults to 1.
+        """
         self._current_idx = min(self._current_idx + step, len(self) - 1)
         self.update()
 
-    def decrement(self, step=1):
+    def decrement(self, step: int = 1):
+        """
+        Decrement the current index.
+
+        Args:
+            step (int, optional): Number of steps to decrement. Defaults to 1.
+        """
         self._current_idx = max(self._current_idx - step, 0)
         self.update()
 
-    def go_to_start(self):  # default: shift+left
+    def go_to_start(self):
+        """Go to the start of the data."""
         self._current_idx = 0
         self.update()
 
     def go_to_end(self):
+        """Go to the end of the data."""
         self._current_idx = len(self) - 1
         self.update()
 
-    def increment_frac(self, n_steps=20):
-        # browse entire dataset in n_steps
+    def increment_frac(self, n_steps: int = 20):
+        """
+        Browse the entire dataset in n_steps. Increment the current index by a fraction of the total length.
+
+        Args:
+            n_steps (int, optional): Number of steps to divide the total length into. Defaults to 20.
+        """
         self._current_idx = min(
             self._current_idx + int(len(self) / n_steps), len(self) - 1
         )
         self.update()
 
-    def decrement_frac(self, n_steps=20):
+    def decrement_frac(self, n_steps: int = 20):
+        """
+        Decrement the current index by a fraction of the total length.
+
+        Args:
+            n_steps (int, optional): Number of steps to divide the total length into. Defaults to 20.
+        """
         self._current_idx = max(self._current_idx - int(len(self) / n_steps), 0)
         self.update()
 
     def copy_to_clipboard(self):
+        """
+        Copy the current figure to the clipboard.
+        Requires PySide2. Install this optionally after the environment is set up as it can cause problems, or live without this feature.
+        """
         from PySide2.QtGui import QClipboard, QImage
 
         buf = io.BytesIO()
@@ -237,7 +302,14 @@ class GenericBrowser:
         QClipboard().setImage(QImage.fromData(buf.getvalue()))
         buf.close()
 
-    def show_key_bindings(self, f=None, pos="bottom right"):
+    def show_key_bindings(self, f: str = None, pos: str = "bottom right"):
+        """
+        Show the key bindings.
+
+        Args:
+            f (str, optional): Figure to show the key bindings in. Defaults to None.
+            pos (str, optional): Position to show the key bindings. Defaults to "bottom right".
+        """
         f = {None: self.figure, "new": plt.figure()}[f]
         text = []
         for shortcut, (_, description) in self._keypressdict.items():
@@ -245,8 +317,18 @@ class GenericBrowser:
         self._keybindingtext = utils.TextView(text, f, pos=pos)
 
     @staticmethod
-    def _filter_sibling_axes(ax, share="x", get_bool=False):
-        """Given a list of matplotlib axes, it will return axes to manipulate by picking one from a set of siblings"""
+    def _filter_sibling_axes(ax: list[maxes.Axes], share: str = "x", get_bool: bool = False):
+        """
+        Given a list of matplotlib axes, it will return axes to manipulate by picking one from a set of siblings.
+
+        Args:
+            ax (list[maxes.Axes]): List of axes to filter.
+            share (str, optional): Axis to share. Defaults to "x".
+            get_bool (bool, optional): Whether to return a boolean array. Defaults to False.
+
+        Returns:
+            list[maxes.Axes] or list[bool]: Filtered axes or boolean array representing the result of filtering relative to the input list of axes.
+        """
         assert share in ("x", "y")
         if isinstance(ax, maxes.Axes):  # only one axis
             return [ax]
@@ -254,12 +336,10 @@ class GenericBrowser:
         if not ax:  # no subplots in figure
             return
         pan_ax = [True] * len(ax)
-        get_siblings = {"x": ax[0].get_shared_x_axes, "y": ax[0].get_shared_y_axes}[
-            share
-        ]().get_siblings
+        get_siblings = {"x": ax[0].get_shared_x_axes, "y": ax[0].get_shared_y_axes}[share]().get_siblings
         for i, ax_row in enumerate(ax):
             sib = get_siblings(ax_row)
-            for j, ax_col in enumerate(ax[i + 1 :]):
+            for j, ax_col in enumerate(ax[i + 1:]):
                 if ax_col in sib:
                     pan_ax[j + i + 1] = False
 
@@ -267,7 +347,14 @@ class GenericBrowser:
             return pan_ax
         return [this_ax for this_ax, this_tf in zip(ax, pan_ax) if this_tf]
 
-    def pan(self, direction="left", frac=0.2):
+    def pan(self, direction: str = "left", frac: float = 0.2):
+        """
+        Pan the view.
+
+        Args:
+            direction (str, optional): Direction to pan. Defaults to "left".
+            frac (float, optional): Fraction of the view to pan. Defaults to 0.2.
+        """
         assert direction in ("left", "right", "up", "down")
         if direction in ("left", "right"):
             pan_ax = "x"
@@ -287,7 +374,16 @@ class GenericBrowser:
         plt.draw()
         self.update_without_clear()  # panning is pointless if update clears the axis!!
 
-    def has(self, asset_type):  # e.g. has('events')
+    def has(self, asset_type: str) -> bool:
+        """
+        Check if the browser has a specific asset type.
+
+        Args:
+            asset_type (str): Type of asset to check for.
+
+        Returns:
+            bool: True if the asset type is present, False otherwise.
+        """
         assert asset_type in (
             "buttons",
             "selectors",
@@ -305,27 +401,28 @@ class PlotBrowser(GenericBrowser):
     Assumes that the plotting function is going to make one figure.
     """
 
-    def __init__(self, plot_data, plot_func, figure_handle=None, **plot_kwargs):
+    def __init__(self, plot_data: list, plot_func: callable, figure_handle: plt.Figure = None, **plot_kwargs):
         """
-        plot_data - list of data objects to browse
+        Initialize the PlotBrowser.
 
-        plot_func can be a tuple (setup_func, update_func), or just one plotting function - update_func
-            If only one function is supplied, figure axes will be cleared on each update.
-            setup_func takes:
-                the first element in plot_data list as its first input
-                keyword arguments (same as plot_func)
-            setup_func outputs:
-                **dictionary** of plot handles that goes as the second input to update_func
+        Args:
+            plot_data (list): List of data objects to browse.
+            plot_func (callable): Plotting function or a tuple of (setup_func, update_func).
+                
+                plot_func can be a tuple (setup_func, update_func), or just one plotting function - update_func
+                If only one function is supplied, figure axes will be cleared on each update.
+                setup_func takes:
+                    the first element in plot_data list as its first input
+                    keyword arguments (same as plot_func)
+                setup_func outputs:
+                    **dictionary** of plot handles that goes as the second input to update_func
 
-            update_func is a plot-refreshing function that accepts 3 inputs:
-                an element in the plot_data list as its first input
-                output of the setup_func if it exists, or a figure handle on which to plot
-                keyword arguments
-
-        figure_handle - (default: None) matplotlib figure handle within which to instantiate the browser
-            Ideally, the setup function will handle this
-
-        plot_kwargs - these keyword arguments will be passed to plot_function after data and figure
+                update_func is a plot-refreshing function that accepts 3 inputs:
+                    an element in the plot_data list as its first input
+                    output of the setup_func if it exists, or a figure handle on which to plot
+                    keyword arguments
+            figure_handle (plt.Figure, optional): Matplotlib figure handle. Defaults to None. Ideally, this is handled by the setup function.
+            **plot_kwargs: Additional keyword arguments to pass to the plotting function.
         """
         self.data = plot_data  # list where each element serves as input to plot_func
         self.plot_kwargs = plot_kwargs
@@ -340,9 +437,7 @@ class PlotBrowser(GenericBrowser):
             elif isinstance(plot_handle, list):
                 figure_handle = plot_handle[0].figure
             else:
-                figure_handle = (
-                    plot_handle.figure
-                )  # figure_handle passed as input will be ignored
+                figure_handle = plot_handle.figure  # figure_handle passed as input will be ignored
         else:
             self.setup_func, self.plot_func = None, plot_func
             self.plot_handles = None
@@ -360,9 +455,7 @@ class PlotBrowser(GenericBrowser):
             start_state=False,
         )
         self.memoryslots.show()
-        if (
-            self.__class__.__name__ == "PlotBrowser"
-        ):  # if an inherited class is accessing this, then don't run the update function here
+        if self.__class__.__name__ == "PlotBrowser":  # if an inherited class is accessing this, then don't run the update function here
             self.update()  # draw the first instance
             self.reset_axes()
             plt.show(block=False)
@@ -379,38 +472,54 @@ class PlotBrowser(GenericBrowser):
             print("Unable to add selectors")
 
     def get_current_data(self):
+        """
+        Get the current data.
+
+        Returns:
+            The current data.
+        """
         return self.data[self._current_idx]
 
-    def update(
-        self, event=None
-    ):  # event = None lets this function be attached as a callback
+    def update(self, event=None):
+        """
+        Update the browser.
+
+        Args:
+            event (optional): Event that triggered the update. Defaults to None.
+        """
         if self.setup_func is None:
             self.figure.clear()  # redraw the entire figure contents each time, NOT recommended
             self.memoryslots.show()
             self.plot_func(self.get_current_data(), self.figure, **self.plot_kwargs)
         else:
             self.memoryslots.update_display()
-            self.plot_func(
-                self.get_current_data(), self.plot_handles, **self.plot_kwargs
-            )
+            self.plot_func(self.get_current_data(), self.plot_handles, **self.plot_kwargs)
         if self.buttons["Auto limits"].state:  # is True
             self.reset_axes()
         super().update(event)
         plt.draw()
 
     def udpate_without_clear(self):
+        """Update the browser without clearing the axis."""
         self.memoryslots.update_display()
         plt.draw()
 
 
 class SignalBrowser(GenericBrowser):
     """
-    Browse an array of pysampled.Data elements, or 2D arrays
+    Browse an array of pysampled.Data elements, or 2D arrays.
     """
 
-    def __init__(
-        self, plot_data, titlefunc=None, figure_handle=None, reset_on_change=False
-    ):
+    def __init__(self, plot_data: list, titlefunc: callable = None, figure_handle: plt.Figure = None, reset_on_change: bool = False):
+        """
+        Initialize the SignalBrowser.
+
+        Args:
+            plot_data (list): List of data objects to browse.
+            titlefunc (callable, optional): Function to generate titles. Defaults to None.
+            figure_handle (plt.Figure, optional): Matplotlib figure handle. Defaults to None.
+            reset_on_change (bool, optional): Whether to reset the view on change. Defaults to False.
+        """
         super().__init__(figure_handle)
 
         self._ax = self.figure.subplots(1, 1)
@@ -442,6 +551,12 @@ class SignalBrowser(GenericBrowser):
         self.update()
 
     def update(self, event=None):
+        """
+        Update the browser.
+
+        Args:
+            event (optional): Event that triggered the update. Defaults to None.
+        """
         this_data = self.data[self._current_idx]
         if isinstance(this_data, pysampled.Data):
             data_to_plot = this_data.split_to_1d()
@@ -877,8 +992,7 @@ class ComponentBrowser(GenericBrowser):
         self.add_key_binding("m", self.toggle_mode)
 
         self._annotation_text = utils.TextView(
-            ["", "Annotation list:"]
-            + [f"{k}:{v}" for k, v in self.annotation_names.items()],
+            ["", "Annotation list:"] + [f"{k}:{v}" for k, v in self.annotation_names.items()],
             self.figure,
             pos="top left",
         )
@@ -954,8 +1068,7 @@ class ComponentBrowser(GenericBrowser):
 
     def update_desired_class_info_text(self, draw=True):
         self._desired_class_info_text.update(
-            ["Desired class list:"]
-            + [f"{k}:{v}" for k, v in self.desired_class_names.items()]
+            ["Desired class list:"] + [f"{k}:{v}" for k, v in self.desired_class_names.items()]
         )
         if draw:
             plt.draw()
