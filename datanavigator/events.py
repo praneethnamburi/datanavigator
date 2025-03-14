@@ -2,9 +2,9 @@
 This module provides classes and functions for managing events and event data.
 
 Classes:
-    EventData - Manage the data from one event type in one trial.
-    Event - Manage selection of a sequence of events.
-    Events - Manager for event objects.
+    :py:class:`EventData` - Manage the data from one event type in one trial.
+    :py:class:`Event` - Manage selection of a sequence of events.
+    :py:class:`Events` - Manager for event objects.
 """
 
 from __future__ import annotations
@@ -693,7 +693,7 @@ class Events(AssetContainer):
         **plot_kwargs,
     ) -> Event:
         """Add events from an existing file.
-        Intended use case - events are created by another algorithm  meant to be edited using a browser in the :py:module:`datanavigator`.
+        Intended use case - events are created by another algorithm  meant to be edited using a browser in the :py:mod:`datanavigator`.
 
         Args:
             fname (str): File name to load the events.

@@ -1,41 +1,48 @@
-"""
+r"""
 Interactive data visualization for signals, videos, and complex data objects.
 
-Classes:
-    GenericBrowser - Generic class to browse data. Meant to be extended.
-    SignalBrowser - Browse an array of pysampled.Data elements, or 2D arrays.
-    PlotBrowser - Scroll through an array of complex data where a plotting function is defined for each element.
-    VideoBrowser - Scroll through the frames of a video.
-    VideoPlotBrowser - Browse through video and 1D signals synced to the video side by side.
-    ComponentBrowser - Browse signals (e.g. from periodic motion) as scatterplots of components (e.g. from UMAP, PCA).
-    
-    Button - Custom button widget with a 'name' state.
-    StateButton - Button widget that stores a number/coordinate state.
-    ToggleButton - Button widget with a toggle state.
-    Selector - Select points in a plot using the lasso selection widget.
-    StateVariable - Manage state variables with multiple states.
-    EventData - Manage the data from one event type in one trial.
-    Event - Manage selection of a sequence of events.
-    
-    AssetContainer - Container for managing assets such as buttons, memory slots, etc.
-    Buttons - Manager for buttons in a matplotlib figure or GUI.
-    Selectors - Manager for selector objects for picking points on line2D objects.
-    MemorySlots - Manager for memory slots to store and navigate positions.
-    StateVariables - Manager for state variables.
-    Events - Manager for event objects.
-    
-    Video - Extended VideoReader class with additional functionalities (helper for VideoPointAnnotator).
-    VideoAnnotation - Manage one point annotation layer in a video.
-    VideoAnnotations - Manager for multiple video annotation layers.
-    VideoPointAnnotator - Annotate points in a video.
+Browsers
 
-Functions:
-    lucas_kanade - Track points in a video using the Lucas-Kanade algorithm.
-    lucas_kanade_rstc - Track points in a video using Lucas-Kanade with reverse sigmoid tracking correction.
-    test_lucas_kanade_rstc - Test function for Lucas-Kanade with reverse sigmoid tracking correction.
+- :py:class:`GenericBrowser`: Generic class to browse data. Meant to be extended.
+- :py:class:`SignalBrowser`: Browse an array of pysampled.Data elements, or 2D arrays.
+- :py:class:`PlotBrowser`: Scroll through an array of complex data where a plotting function is defined for each element.
+- :py:class:`VideoBrowser`: Scroll through the frames of a video.
+- :py:class:`VideoPlotBrowser`: Browse through video and 1D signals synced to the video side by side.
+- :py:class:`ComponentBrowser`: Browse signals (e.g., from periodic motion) as scatterplots of components (e.g., from UMAP, PCA).
 
-External requirements:
-    `ffprobe` - Required for Video class to get video information.
+
+Point tracking
+
+- :py:class:`Video`: Extended VideoReader class with additional functionalities (helper for VideoPointAnnotator).
+- :py:class:`VideoAnnotation`: Manage one point annotation layer in a video.
+- :py:class:`VideoAnnotations`: Manager for multiple video annotation layers.
+- :py:class:`VideoPointAnnotator`: Annotate points in a video.
+
+Optical flow
+
+- :py:func:`lucas_kanade`: Track points in a video using the Lucas-Kanade algorithm.
+- :py:func:`lucas_kanade_rstc`: Track points in a video using Lucas-Kanade with reverse sigmoid tracking correction.
+- :py:func:`test_lucas_kanade_rstc`: Test function for Lucas-Kanade with reverse sigmoid tracking correction.
+
+Assets
+
+- :py:class:`Button`: Custom button widget with a 'name' state.
+- :py:class:`StateButton`: Button widget that stores a number/coordinate state.
+- :py:class:`ToggleButton`: Button widget with a toggle state.
+- :py:class:`Selector`: Select points in a plot using the lasso selection widget.
+- :py:class:`StateVariable`: Manage state variables with multiple states.
+- :py:class:`EventData`: Manage the data from one event type in one trial.
+- :py:class:`Event`: Manage selection of a sequence of events.
+
+Assetcontainers
+
+- :py:class:`AssetContainer`: Container for managing assets such as buttons, memory slots, etc.
+- :py:class:`Buttons`: Manager for buttons in a matplotlib figure or GUI.
+- :py:class:`Selectors`: Manager for selector objects for picking points on line2D objects.
+- :py:class:`MemorySlots`: Manager for memory slots to store and navigate positions.
+- :py:class:`StateVariables`: Manager for state variables.
+- :py:class:`Events`: Manager for event objects.
+
 """
 import os
 import sys
@@ -114,7 +121,7 @@ def check_ffmpeg():
         print("One or both of FFmpeg and FFprobe are missing.")
         print_install_instructions()
 
-        
+
 if not os.path.exists(get_clip_folder()):
     folder = os.getcwd()
     print(f"Using the current working directory-{folder}-for storing video clips.")

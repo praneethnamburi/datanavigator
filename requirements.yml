@@ -11,5 +11,6 @@ dependencies:
   - portion
   - ffmpeg-python
   - pip:
+    - opencv-contrib-python
     - pysampled
     - decord

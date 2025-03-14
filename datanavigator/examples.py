@@ -13,7 +13,7 @@ import os
 import urllib.request
 import tempfile
 from pathlib import Path
-from typing import Callable, Optional, Any
+from typing import Callable, Optional, Any, List
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -180,7 +180,7 @@ class SignalBrowserKeyPress(SignalBrowser):
 
     def __init__(
         self,
-        plot_data: list[pysampled.Data],
+        plot_data: List[pysampled.Data],  # Use List from typing module
         titlefunc: Optional[Callable] = None,
         figure_handle: Optional[Any] = None,
         reset_on_change: bool = False,
