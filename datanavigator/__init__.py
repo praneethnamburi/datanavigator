@@ -42,11 +42,12 @@ Assetcontainers
 - :py:class:`MemorySlots`: Manager for memory slots to store and navigate positions.
 - :py:class:`StateVariables`: Manager for state variables.
 - :py:class:`Events`: Manager for event objects.
-
 """
 import os
 import sys
 import shutil
+
+from .__version__ import __version__
 
 from ._config import (
     get_cache_folder,

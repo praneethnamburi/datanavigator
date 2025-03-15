@@ -10,8 +10,9 @@ requires-python = ">=3.7"
 dynamic = ["version", "description"]
 dependencies = [
     "numpy",
+    "pandas",
     "matplotlib",
-    "opencv",
+    "opencv-contrib-python",
     "portion",
     "ffmpeg-python",
     "pysampled",

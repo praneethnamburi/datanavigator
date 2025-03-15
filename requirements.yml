@@ -1,4 +1,4 @@
-name: dev-datanavigator
+name: datanavigator
 channels:
   - defaults
   - conda-forge
@@ -6,6 +6,7 @@ dependencies:
   - python>=3.7
   - pip
   - numpy
+  - pandas
   - matplotlib
   - opencv
   - portion
