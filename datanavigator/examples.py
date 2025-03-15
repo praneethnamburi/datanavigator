@@ -25,18 +25,29 @@ from .core import Buttons
 from .signals import SignalBrowser
 
 
-def get_example_video(url: str=None) -> str:
+def get_example_video(dest_folder: str=None, source_url: str=None) -> str:
     """Download a sample video and return the path to that video."""
-    if url is None:
-        url = "https://test-videos.co.uk/vids/jellyfish/mp4/h264/720/Jellyfish_720_10s_2MB.mp4"
+    if dest_folder is None:
+        dest_folder = _config.get_clip_folder()
+    else:
+        assert os.path.exists(dest_folder), f"Folder {dest_folder} does not exist."
+    
+    example_video_path = os.path.join(dest_folder, "example_video.mp4")
+    if os.path.exists(example_video_path):
+        return example_video_path
 
-    with urllib.request.urlopen(url) as response:
-        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as temp_file:
+    if source_url is None:
+        source_url = "https://test-videos.co.uk/vids/jellyfish/mp4/h264/720/Jellyfish_720_10s_2MB.mp4"
+
+    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
+    req = urllib.request.Request(source_url, headers=headers)
+
+    with urllib.request.urlopen(req) as response:
+        with open(example_video_path, "wb") as temp_file:
             temp_file.write(response.read())
-            temp_video_path = temp_file.name
 
-    print(f"Downloaded video to: {temp_video_path}")
-    return temp_video_path
+    print(f"Downloaded video to: {example_video_path}")
+    return example_video_path
 
 
 class EventPickerDemo(SignalBrowser):

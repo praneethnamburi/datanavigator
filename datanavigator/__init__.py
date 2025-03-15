@@ -90,13 +90,14 @@ from .utils import (
 )
 
 from .examples import (
-    get_example_video, 
-    EventPickerDemo, 
-    ButtonDemo, 
-    SelectorDemo, 
+    get_example_video,
+    EventPickerDemo,
+    ButtonDemo,
+    SelectorDemo,
 )
 
-def check_ffmpeg():
+
+def _check_ffmpeg():
     def check_command(command):
         """Check if a command is available in the system's PATH."""
         return shutil.which(command) is not None
@@ -116,15 +117,19 @@ def check_ffmpeg():
 
     # Check if ffmpeg and ffprobe are available
     ffmpeg_found = check_command("ffmpeg")
-    ffprobe_found = check_command("ffprobe")
 
-    if not (ffmpeg_found and ffprobe_found):
-        print("One or both of FFmpeg and FFprobe are missing.")
+    if not ffmpeg_found:
+        print("Cound not find ffmpeg.")
         print_install_instructions()
 
 
-if not os.path.exists(get_clip_folder()):
-    folder = os.getcwd()
-    print(f"Using the current working directory-{folder}-for storing video clips.")
-    set_clip_folder(folder)
-    print("To change, use datanavigator.set_clip_folder(<folder_name>)")
+def _check_clip_folder():
+    if not os.path.exists(get_clip_folder()):
+        folder = os.getcwd()
+        print(f"Using the current working directory-{folder}-for storing video clips.")
+        set_clip_folder(folder)
+        print("To change, use datanavigator.set_clip_folder(<folder_name>)")
+
+
+_check_ffmpeg()
+_check_clip_folder()

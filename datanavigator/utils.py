@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import errno
 import os
-import subprocess
 import sys
 from pathlib import Path
 from typing import List, Tuple, Union
@@ -263,34 +262,14 @@ def get_palette(
         return palettes[palette_name][:n_colors]
 
 
-def is_video(vid_file: str, verbose: bool = False) -> bool:
-    """Check if a file is a video file.
-
-    Args:
-        vid_file (str): Path to the video file.
-        verbose (bool, optional): If True, print additional information. Defaults to False.
-
-    Returns:
-        bool: True if the file is a video file, False otherwise.
-    """
-    codec_types = subprocess.getoutput(
-        f'ffprobe -loglevel error -show_entries stream=codec_type -of default=nw=1 "{vid_file}"'
-    )
-    if verbose:
-        my_print = print
-    else:
-        my_print = lambda x: None
-
-    ret = False
-    if "Invalid data" in codec_types:
-        my_print("Not an audio or video file")
-    if "codec_type=video" in codec_types:
-        ret = True
-        my_print("Video stream found")
-    if "codec_type=audio" in codec_types:
-        my_print("Audio stream found")
-    return ret
-
+def is_video(vide_file: str):
+    cap = cv.VideoCapture(vide_file)
+    if cap.isOpened():
+        ret, _ = cap.read()
+        cap.release()
+        return ret  # If we can read a frame, it's a video
+    return False
+    
 
 class Video(VideoReader):
     """Extended VideoReader class with additional methods."""
