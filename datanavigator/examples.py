@@ -11,7 +11,6 @@ Classes:
 
 import os
 import urllib.request
-import tempfile
 from pathlib import Path
 from typing import Callable, Optional, Any, List
 
@@ -75,7 +74,7 @@ class EventPickerDemo(SignalBrowser):
             pick_action="append",
             ax_list=[self._ax],
             add_key="1",
-            remove_key="4",
+            remove_key="alt+1",
             save_key="ctrl+1",
             linewidth=1.5,
         )
@@ -88,7 +87,7 @@ class EventPickerDemo(SignalBrowser):
             pick_action="append",
             ax_list=[self._ax],
             add_key="2",
-            remove_key="5",
+            remove_key="alt+2",
             save_key="ctrl+2",
             linewidth=1.5,
         )
@@ -101,7 +100,7 @@ class EventPickerDemo(SignalBrowser):
             pick_action="overwrite",
             ax_list=[self._ax],
             add_key="3",
-            remove_key="6",
+            remove_key="alt+3",
             save_key="ctrl+3",
             linewidth=1.5,
         )

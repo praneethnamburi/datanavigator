@@ -81,7 +81,6 @@ from .pointtracking import VideoAnnotation, VideoAnnotations, VideoPointAnnotato
 from .utils import (
     TextView,
     Video,
-    find_nearest,
     get_palette,
     is_path_exists_or_creatable,
     is_video,

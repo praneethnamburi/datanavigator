@@ -42,21 +42,6 @@ def ticks_from_times(
     return nan_pad_x(times), nan_pad_y(tick_lim, len(times))
 
 
-def find_nearest(x: List[float], y: List[float]) -> List[float]:
-    """Find the nearest x-values for every value in y.
-
-    Args:
-        x (List[float]): List of x-values.
-        y (List[float]): List of y-values.
-
-    Returns:
-        List[float]: List with the same number of values as y, but each value is the closest value in x.
-    """
-    x = np.asarray(x)
-    y = np.asarray(y)
-    return [x[np.argmin(np.abs(x - yi))] for yi in y]
-
-
 class _List(list):
     """Extended list with additional methods to find next and previous elements."""
 

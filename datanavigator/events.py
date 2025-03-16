@@ -88,7 +88,11 @@ class EventData:
 
     def __and__(self, other: EventData) -> EventData:
         """Return the intersection of two EventData objects."""
-        return EventData(default=list(self.to_portions() & other.to_portions()))
+        try:
+            x = self.to_portions() & other.to_portions()
+        except TypeError:
+            raise TypeError("Intersection is only implemented for size-2 events (start and stop times).")
+        return EventData(default=[[xi.lower, xi.upper] for xi in x if xi.upper != xi.lower]) # only return non-zero duration events
 
     def __contains__(self, item: Any) -> bool:
         """Check if an item is in the event data."""
@@ -163,6 +167,8 @@ class Event:
         self._buffer = []
         _, self._data = self.load()
 
+        if ax_list is None:
+            ax_list = []
         self.ax_list = ax_list
         self.plot_handles = []
 
@@ -283,7 +289,7 @@ class Event:
                     # if there is new data, then add it to the event file
                     print(f"Appending new data to the event file {fname}:")
                     print(new_keys)
-                    ret_existing._data = ret._data | ret_existing._data
+                    ret_existing._data = {**ret._data, **ret_existing._data}
                     ret_existing.save()
         return ret
 
@@ -416,8 +422,13 @@ class Event:
             self._data[data_id] = EventData()
         if self.pick_action == "append":
             self._data[data_id].added.append(sequence)
-        else:
+        else: # overwrite
             self._data[data_id].added = [sequence]
+            assert len(self._data[data_id].default) in (0, 1)
+            if len(self._data[data_id].default) == 1:
+                # remove the event in default and add the new one to added
+                self._data[data_id].removed.append(self._data[data_id].default[0])
+                self._data[data_id].default = []
 
         print(self.name, "add", data_id, sequence)
         self._buffer = []
@@ -444,8 +455,8 @@ class Event:
         _removed = False
         _deleted = False
         if len(ev.added) > 0 and len(ev.default) > 0:
-            idx_add, val_add = utils.find_nearest(added_start_times, t_marked)
-            idx_def, val_def = utils.find_nearest(default_start_times, t_marked)
+            idx_add, val_add = _find_nearest_idx_val(added_start_times, t_marked)
+            idx_def, val_def = _find_nearest_idx_val(default_start_times, t_marked)
 
             add_dist = np.abs(val_add - t_marked)
             def_dist = np.abs(val_def - t_marked)
@@ -461,13 +472,13 @@ class Event:
                 ev.removed.append(sequence)
                 _removed = True
         elif len(ev.added) > 0 and len(ev.default) == 0:
-            idx_add, val_add = utils.find_nearest(added_start_times, t_marked)
+            idx_add, val_add = _find_nearest_idx_val(added_start_times, t_marked)
             add_dist = np.abs(val_add - t_marked)
             if self.win_remove[0] < add_dist < self.win_remove[1]:
                 sequence = ev.added.pop(idx_add)
                 _deleted = True
         elif len(ev.added) == 0 and len(ev.default) > 0:
-            idx_def, val_def = utils.find_nearest(default_start_times, t_marked)
+            idx_def, val_def = _find_nearest_idx_val(default_start_times, t_marked)
             def_dist = np.abs(val_def - t_marked)
             if self.win_remove[0] < def_dist < self.win_remove[1]:
                 sequence = ev.default.pop(idx_def)
@@ -509,7 +520,7 @@ class Event:
 
     def _setup_display_line(self) -> None:
         """Setup line display for the event."""
-        plot_kwargs = {"label": f"event:{self.name}"} | self.plot_kwargs
+        plot_kwargs = {**{"label": f"event:{self.name}"}, ** self.plot_kwargs}
         plot_kwargs.pop("display_type", None)
         for ax in self.ax_list:
             (this_plot,) = ax.plot([], [], color=self.color, **plot_kwargs)
@@ -557,7 +568,7 @@ class Event:
         for plot_handle in self.plot_handles:
             plot_handle.remove()
         self.plot_handles = []
-        plot_kwargs = dict(alpha=0.2, edgecolor=None) | self.plot_kwargs
+        plot_kwargs = {**dict(alpha=0.2, edgecolor=None), **self.plot_kwargs}
         plot_kwargs.pop("display_type", None)
         for ax in self.ax_list:
             yl = self._get_ylim(ax)
@@ -586,7 +597,7 @@ class Event:
         """Convert the event data to a dictionary."""
         event_data = self._data
         if self.pick_action == "overwrite":
-            ret = {k: v.get_times()[0] for k, v in event_data.items()}
+            ret = {k: v.get_times()[:1] for k, v in event_data.items()}
         else:
             ret = {k: v.get_times() for k, v in event_data.items()}
         return ret
@@ -712,7 +723,7 @@ class Events(AssetContainer):
         ev = Event._from_existing_file(fname)
         hdr = ev.get_header()
         del hdr["all_keys_are_tuples"]
-        plot_kwargs = hdr["plot_kwargs"] | plot_kwargs
+        plot_kwargs = {**hdr["plot_kwargs"], **plot_kwargs}
         del hdr["plot_kwargs"]
         return self.add(
             data_id_func=data_id_func,
@@ -722,7 +733,7 @@ class Events(AssetContainer):
             save_key=save_key,
             show=show,
             data_func=data_func,
-            **(hdr | plot_kwargs),
+            **{**hdr, **plot_kwargs},
         )
 
     def setup_display(self) -> None:
@@ -736,3 +747,20 @@ class Events(AssetContainer):
             ev.update_display(draw=False)
         if draw:
             plt.draw()
+
+
+def _find_nearest_idx_val(array: List[float], value: float) -> Tuple[int, float]:
+    """Find the index and value of the nearest element in the array to the given value.
+
+    Args:
+        array (list[float]): List of values.
+        value (float): Value to find the nearest element for.
+
+    Returns:
+        Tuple[int, float]: Index and value of the nearest element.
+    """    
+    """"""
+    array = np.asarray(array)
+    idx = (np.abs(array - value)).argmin()
+    val = array[idx]
+    return idx, val

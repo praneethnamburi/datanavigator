@@ -8,7 +8,6 @@ from matplotlib import axes as maxes
 from datanavigator import get_example_video
 from datanavigator.utils import (
     ticks_from_times,
-    find_nearest,
     _List,
     portion,
     _parse_fax,
@@ -44,12 +43,6 @@ def test_ticks_from_times():
     x, y = ticks_from_times(times, tick_lim)
     assert x == [1, 1, np.nan, 2, 2, np.nan, 3, 3, np.nan]
     assert y == [0, 1, np.nan, 0, 1, np.nan, 0, 1, np.nan]
-
-def test_find_nearest():
-    x = [1, 2, 3]
-    y = [2.1, 2.5, 2.9]
-    result = find_nearest(x, y)
-    assert result == [2, 2, 3]
 
 def test_List():
     lst = _List([1, 0, 2, 4, 3])
