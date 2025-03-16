@@ -12,6 +12,7 @@ from __future__ import annotations
 import functools
 import json
 import os
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -46,14 +47,25 @@ class EventData:
         algorithm_name: str = "",
         params: Optional[Dict] = None,
     ) -> None:
-        _to_list = lambda x: [] if x is None else x
+        def _to_list(x: Any) -> List:
+            return [] if x is None else x
 
-        self.default = _to_list(default)
-        self.added = _to_list(added)
-        self.removed = _to_list(removed)
+        def _1d_to_2d(x: List) -> List:
+            v = np.asarray(x)
+            if v.ndim == 1:  # passing in a list events of size 1, e.g., [1, 2, 3, 4]. Turn it into [[1], [2], [3], [4]]
+                v = v[:, np.newaxis]
+                return [list(vi) for vi in v]
+            return x
+
+        self.default =_1d_to_2d( _to_list(default))
+        self.added = _1d_to_2d(_to_list(added))
+        self.removed = _1d_to_2d(_to_list(removed))
         self.tags = _to_list(tags)
         self.algorithm_name = algorithm_name
         self.params = params if params is not None else {}
+
+        # assert uniform size of events, 0 when there are no events
+        assert len(set([len(x) for x in self.get_times()])) in (0, 1), "All events must have the same size."
 
     def asdict(self) -> Dict:
         """Convert the event data to a dictionary."""
@@ -69,6 +81,13 @@ class EventData:
     def __len__(self) -> int:
         """Return the number of events."""
         return len(self.get_times())
+    
+    def get_size(self) -> int:
+        """Return the size of the envent, for example, 2 for start and stop events."""
+        size_set = set([len(x) for x in self.get_times()])
+        if len(size_set) == 1:
+            return size_set.pop()
+        raise ValueError("All events must have the same size.")
 
     def get_times(self) -> List:
         """Get the times of all events."""
@@ -103,6 +122,8 @@ class EventData:
         other: Union["utils.portion.Interval", Tuple]
     ) -> utils.portion.Interval:
         """Process the input to ensure it is an interval."""
+        if other.__class__.__name__ == EventData.__name__:
+            return other.to_portions()
         if not isinstance(other, utils.portion.Interval):
             assert len(other) == 2
             other = utils.portion.closed(*other)
@@ -112,11 +133,6 @@ class EventData:
         """Calculate the duration of overlap with another interval."""
         other = self._process_inp(other)
         return (self.to_portions() & other).duration
-
-    def overlap_frac(self, other: Union["utils.portion.Interval", Tuple]) -> float:
-        """Calculate the fraction of overlap with another interval."""
-        other = self._process_inp(other)
-        return self.overlap_duration(other) / other.duration
 
 
 class Event:
@@ -142,7 +158,7 @@ class Event:
         name: str,
         size: int,
         fname: str,
-        data_id_func: Optional[Callable] = None,
+        data_id_func: Optional[Callable] = lambda: None,
         color: Union[str, int] = "random",
         pick_action: str = "overwrite",
         ax_list: Optional[List] = None,
@@ -178,15 +194,9 @@ class Event:
         self._hide = False
         self.data_func = data_func
 
-    def initialize_event_data(self, data_id_list: List) -> None:
-        """Initialize event data for a list of data IDs."""
-        for data_id in data_id_list:
-            if data_id not in self._data:
-                self._data[data_id] = EventData()
-
     @classmethod
     def _from_existing_file(
-        cls, fname: str, data_id_func: Optional[Callable] = None
+        cls, fname: str, data_id_func: Optional[Callable] = lambda: None
     ) -> Event:
         """Create an Event object by reading an existing JSON file."""
         h, _ = cls._read_json_file(fname)
@@ -212,12 +222,12 @@ class Event:
         if not os.path.exists(fname):
             kwargs["name"] = kwargs.get("name", Path(fname).stem)
             kwargs["size"] = kwargs.get("size", 1)
-            kwargs["data_id_func"] = kwargs.get("data_id_func", None)
+            kwargs["data_id_func"] = kwargs.get("data_id_func", lambda: None)
 
             ret = cls(fname=fname, **kwargs)
             ret.save()
             return ret
-        return cls._from_existing_file(fname, kwargs.get("data_id_func", None))
+        return cls._from_existing_file(fname, kwargs.get("data_id_func", lambda: None))
 
     @classmethod
     def from_data(
@@ -243,18 +253,7 @@ class Event:
         Returns:
             Event: The created Event object.
         """
-        def _get_uniform_size(event_times_list: List[List]) -> int:
-            size_set = set([len(x) for x in event_times_list])
-            if len(size_set) == 1:
-                return size_set.pop()
-            raise ValueError("All events must have the same size.")
-        
-        def _1d_to_2d(x: List) -> List:
-            v = np.asarray(x)
-            if v.ndim == 1:  # passing in a list events of size 1, e.g., [1, 2, 3, 4]. Turn it into [[1], [2], [3], [4]]
-                v = v[:, np.newaxis]
-                return [list(vi) for vi in v]
-            return x
+        data = deepcopy(data)
 
         algorithm_info = dict(
             tags=kwargs.pop("tags", []),
@@ -264,14 +263,13 @@ class Event:
 
         for key, val in data.items():
             if not isinstance(val, EventData):
-                val = _1d_to_2d(val)
                 data[key] = EventData(default=val, **algorithm_info)
 
         size = []
         for key, val in data.items():
             # when there are no events, size cannot be inferred for that trial. Note that this process will fail if there are no events in ANY of the trials. size has to be passed in with kwargs.
             if len(val) > 0:
-                size.append(_get_uniform_size(data[key].get_times()))
+                size.append(data[key].get_size())
 
         if not size:
             # if there were no events in the data that was passed!
@@ -292,22 +290,28 @@ class Event:
                 data[key].default = data[key].default[-1:]  # keep only the last one
         ret._data = data
 
-        # save the file if file name either exists or is creatable
-        if utils.is_path_exists_or_creatable(str(fname)):
-            if (not os.path.exists(fname)) or overwrite:
-                ret.save()
-            else:
-                # if the file exists and we decided not to overwrite, then append new data to the file
-                assert os.path.exists(fname) and (not overwrite)
-                ret_existing = cls.from_file(fname, **kwargs)
-                new_keys = set(ret._data.keys()) - set(ret_existing._data.keys())
-                if len(new_keys) > 0:
-                    # if there is new data, then add it to the event file
-                    print(f"Appending new data to the event file {fname}:")
-                    print(new_keys)
-                    ret_existing._data = {**ret._data, **ret_existing._data}
-                    ret_existing.save()
-        return ret
+        # If the file path does not exists or is not creatable, then return the data that was passed in without saving it
+        if not utils.is_path_exists_or_creatable(str(fname)):
+            return ret
+        
+        # Save the file if it does not exist or if the mandate is to overwrite the file
+        if (not os.path.exists(fname)) or overwrite:
+            ret.save()
+            return ret
+
+        # If the file exists and we decided not to overwrite, then append new data to the file
+        assert os.path.exists(fname) and (not overwrite)
+        ret_existing = cls.from_file(fname, **kwargs)
+        new_keys = set(ret._data.keys()) - set(ret_existing._data.keys())
+        
+        # If there is new data, then add it to the event file
+        # Whether there are new keys or not, the data in the existing saved file supercedes the data that was passed in
+        print(f"Appending new data to the event file {fname}:")
+        print(new_keys)
+        ret_existing._data = {**ret._data, **ret_existing._data}
+        ret_existing.save()
+        
+        return ret_existing
 
     def all_keys_are_tuples(self) -> bool:
         """Check if all keys are tuples."""
@@ -413,6 +417,7 @@ class Event:
             return max(smallest, min(n, largest))
 
         if event.xdata is None:
+            # click is outside the axis limits
             if not self._buffer:
                 inferred_timestamp = _get_first_available_timestamp()
             else:
@@ -503,11 +508,10 @@ class Event:
                 sequence = ev.default.pop(idx_def)
                 ev.removed.append(sequence)
                 _removed = True
-        else:
+        else: # both are empty
             return
 
-        if sequence is None:
-            return
+        assert sequence is not None
 
         assert _removed is not _deleted
         # removed moves data from default (i.e. auto-detected) to removed, and delete expunges a manually added event
@@ -516,11 +520,7 @@ class Event:
 
     def get_current_event_times(self) -> List:
         """Get the current event times."""
-        return list(
-            np.array(
-                self._data.get(self.data_id_func(), EventData()).get_times()
-            ).flatten()
-        )
+        return self._data.get(self.data_id_func(), EventData()).get_times()
 
     def _get_display_funcs(self) -> Tuple[Callable, Callable]:
         """Get the display functions."""
@@ -625,12 +625,12 @@ class Event:
     def to_portions(self) -> Dict:
         """Convert the event data to portions."""
         assert self.size == 2
-        P = utils.portion
         ret = {}
         for signal_id, signal_events in self.to_dict().items():
             ret[signal_id] = functools.reduce(
                 lambda a, b: a | b,
-                [P.closed(*interval_limits) for interval_limits in signal_events],
+                [utils.portion.closed(*interval_limits) for interval_limits in signal_events],
+                utils.portion.empty()
             )
         return ret
 
