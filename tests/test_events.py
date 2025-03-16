@@ -6,8 +6,7 @@ from matplotlib.backend_bases import MouseEvent
 import matplotlib.pyplot as plt
 
 from datanavigator import events
-from datanavigator.events import EventData, Event, Events, _find_nearest_idx_val
-from datanavigator.utils import portion
+from datanavigator.events import portion, EventData, Event, Events, _find_nearest_idx_val
 
 
 @pytest.fixture(scope="module")
@@ -49,6 +48,14 @@ def simulate_mouse_click(fax, xdata=0.5, ydata=0.5, button=1):
         guiEvent=None,
     )
     return event
+
+
+def test_portion():
+    p = portion.closed(1, 2) | portion.closed(3, 5.4)
+    assert np.allclose(p.atomic_durations, [1, 2.4])
+    assert np.allclose(p.duration, 3.4)
+    assert p.enclosure == portion.closed(1, 5.4)
+    assert np.allclose(p.fraction, (p.duration / p.enclosure.duration))
 
 
 def test_event_data_initialization():

@@ -9,7 +9,6 @@ from datanavigator import get_example_video
 from datanavigator.utils import (
     ticks_from_times,
     _List,
-    portion,
     _parse_fax,
     _parse_pos,
     TextView,
@@ -50,13 +49,6 @@ def test_List():
     assert lst.next(10) == 4
     assert lst.previous(1.1) == 1
     assert lst.previous(1) == lst.previous(0) == lst.previous(-10) == 0
-
-def test_portion():
-    p = portion.closed(1, 2) | portion.closed(3, 5.4)
-    assert np.allclose(p.atomic_durations, [1, 2.4])
-    assert np.allclose(p.duration, 3.4)
-    assert p.enclosure == portion.closed(1, 5.4)
-    assert np.allclose(p.fraction, (p.duration / p.enclosure.duration))
 
 def test_parse_fax():
     fig, ax = plt.subplots()

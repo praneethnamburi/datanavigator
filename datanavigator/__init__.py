@@ -67,7 +67,7 @@ from .assets import (
     StateVariables,
     ToggleButton,
 )
-from .events import Event, EventData, Events
+from .events import portion, Event, EventData, Events
 
 from .core import GenericBrowser
 from .plots import PlotBrowser
@@ -84,7 +84,6 @@ from .utils import (
     get_palette,
     is_path_exists_or_creatable,
     is_video,
-    portion,
     ticks_from_times,
 )
 

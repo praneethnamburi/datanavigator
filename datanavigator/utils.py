@@ -14,7 +14,6 @@ from typing import List, Tuple, Union
 
 import cv2 as cv
 import numpy as np
-import portion as P
 from decord import VideoReader, cpu
 from matplotlib import axes as maxes
 from matplotlib import pyplot as plt
@@ -66,40 +65,6 @@ class _List(list):
             float: Previous element in the list closest to val.
         """
         return max([x for x in self if x < val], default=min(self))
-
-
-class _PNInterval(P.Interval):
-    """Extended portion Interval class with additional properties."""
-
-    @property
-    def atomic_durations(self) -> List[float]:
-        """List of atomic durations in the event. In this case, an atom is one interval with start and end times.
-
-        Returns:
-            List[float]: Atomic durations.
-        """
-        return [xi.upper - xi.lower for xi in self]
-
-    @property
-    def duration(self) -> float:
-        """Total duration (sum of atomic durations) of the interval.
-
-        Returns:
-            float: Total duration.
-        """
-        return sum(self.atomic_durations)
-
-    @property
-    def fraction(self) -> float:
-        """Fractional duration relative to the enclosure.
-
-        Returns:
-            float: Fractional duration.
-        """
-        return self.duration / self.enclosure.duration
-
-
-portion = P.create_api(_PNInterval)
 
 
 def _parse_fax(

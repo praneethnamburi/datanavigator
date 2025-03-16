@@ -17,12 +17,47 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
+import portion as P
 from matplotlib import pyplot as plt
 
 from . import utils
 from .assets import AssetContainer
 
 PLOT_COLORS = plt.rcParams["axes.prop_cycle"].by_key()["color"]
+
+
+class _PNInterval(P.Interval):
+    """Extended portion Interval class with additional properties."""
+
+    @property
+    def atomic_durations(self) -> List[float]:
+        """List of atomic durations in the event. In this case, an atom is one interval with start and end times.
+
+        Returns:
+            List[float]: Atomic durations.
+        """
+        return [xi.upper - xi.lower for xi in self]
+
+    @property
+    def duration(self) -> float:
+        """Total duration (sum of atomic durations) of the interval.
+
+        Returns:
+            float: Total duration.
+        """
+        return sum(self.atomic_durations)
+
+    @property
+    def fraction(self) -> float:
+        """Fractional duration relative to the enclosure.
+
+        Returns:
+            float: Fractional duration.
+        """
+        return self.duration / self.enclosure.duration
+
+
+portion = P.create_api(_PNInterval)
 
 
 class EventData:
@@ -95,12 +130,12 @@ class EventData:
         x.sort()
         return x
 
-    def to_portions(self) -> "utils.portion.Interval":
+    def to_portions(self) -> "portion.Interval":
         """Convert the event times to portions."""
         return functools.reduce(
             lambda a, b: a | b,
             [
-                utils.portion.closed(*interval_limits)
+                portion.closed(*interval_limits)
                 for interval_limits in self.get_times()
             ],
         )
@@ -119,17 +154,17 @@ class EventData:
 
     @staticmethod
     def _process_inp(
-        other: Union["utils.portion.Interval", Tuple]
-    ) -> utils.portion.Interval:
+        other: Union["portion.Interval", Tuple]
+    ) -> portion.Interval:
         """Process the input to ensure it is an interval."""
         if other.__class__.__name__ == EventData.__name__:
             return other.to_portions()
-        if not isinstance(other, utils.portion.Interval):
+        if not isinstance(other, portion.Interval):
             assert len(other) == 2
-            other = utils.portion.closed(*other)
+            other = portion.closed(*other)
         return other
 
-    def overlap_duration(self, other: Union["utils.portion.Interval", Tuple]) -> float:
+    def overlap_duration(self, other: Union["portion.Interval", Tuple]) -> float:
         """Calculate the duration of overlap with another interval."""
         other = self._process_inp(other)
         return (self.to_portions() & other).duration
@@ -629,8 +664,8 @@ class Event:
         for signal_id, signal_events in self.to_dict().items():
             ret[signal_id] = functools.reduce(
                 lambda a, b: a | b,
-                [utils.portion.closed(*interval_limits) for interval_limits in signal_events],
-                utils.portion.empty()
+                [portion.closed(*interval_limits) for interval_limits in signal_events],
+                portion.empty()
             )
         return ret
 
