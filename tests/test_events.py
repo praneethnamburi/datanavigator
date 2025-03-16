@@ -1,4 +1,6 @@
 import pytest
+import os
+from copy import deepcopy
 import numpy as np
 from unittest.mock import Mock
 from matplotlib.backend_bases import MouseEvent
@@ -161,6 +163,57 @@ def test_event_to_dict():
     event = Event(name="test_event", size=2, pick_action="append", fname="test.json", data_id_func=data_id_func)
     event._data["test_id"] = EventData(default=[[1, 2]])
     assert event.to_dict() == {"test_id": [[1, 2]]}
+
+def test_event_save(matplotlib_figure, event_file_path):
+    # add an event when pick_action is append
+    data_id_func = Mock(return_value="test_id")
+    event = Event(name="test_event", size=2, pick_action="append", fname=event_file_path, data_id_func=data_id_func)
+    event._data["test_id"] = EventData(default=[[0.2, 0.25], [0.1, 0.17], [0.45, 0.55]])
+    event.add(simulate_mouse_click(matplotlib_figure, xdata=0.8))
+    event.add(simulate_mouse_click(matplotlib_figure, xdata=0.85))
+    event.add(simulate_mouse_click(matplotlib_figure, xdata=0.4))
+    event.add(simulate_mouse_click(matplotlib_figure, xdata=0.6))
+    event.remove(simulate_mouse_click(matplotlib_figure, xdata=0.45))
+    event.save()
+
+def test_event_from_file(event_file_path):
+    assert os.path.exists(event_file_path)
+    event = Event.from_file(fname=event_file_path)
+    # to_dict will sort the event entries
+    assert np.allclose(event.to_dict()["test_id"], [[0.1, 0.17], [0.2, 0.25], [0.4, 0.6], [0.8, 0.85]])
+    # events in added, default, and removed will remain in the sequence they were added
+    assert np.allclose(event._data["test_id"].default, [[0.2, 0.25], [0.1, 0.17]])
+    assert np.allclose(event._data["test_id"].added, [[0.8, 0.85], [0.4, 0.6]])
+    assert np.allclose(event._data["test_id"].removed, [[0.45, 0.55]])
+    os.remove(event_file_path)
+
+def test_event_from_data(matplotlib_figure):
+    data = {
+        (1,1): [[0.1, 0.2], [0.3, 0.4]], 
+        (1,2): [[0.5, 0.6]],
+        (2,1): [[0.7, 0.8], [0.9, 1.0], [0.85, 0.87]],
+        (2,2): [],
+        }
+    event = Event.from_data(deepcopy(data), name="test_event")
+    # only the last events are kept because pick_action is overwrite by default
+    assert np.allclose(event._data[(2,1)].default, [[0.85, 0.87]])
+    assert np.allclose(event.to_dict()[(2,1)], [[0.85, 0.87]]) # because pick_action is overwrite
+
+    event.data_id_func = Mock(return_value=(1,2))
+    event.add(simulate_mouse_click(matplotlib_figure, xdata=0.75))
+    event.add(simulate_mouse_click(matplotlib_figure, xdata=0.82))
+    assert np.allclose(event._data[(1,2)].default, [])
+    assert np.allclose(event._data[(1,2)].removed, [[0.5, 0.6]])
+    assert np.allclose(event._data[(1,2)].added, [[0.75, 0.82]])
+    # added events will be treated as being added after default
+    assert np.allclose(event.to_dict()[(1,2)], [[0.75, 0.82]])
+
+    event = Event.from_data(deepcopy(data), name="test_event", pick_action="append")
+    # to_dict will sort the event entries
+    assert np.allclose(event.to_dict()[(2,1)], [[0.7, 0.8], [0.85, 0.87], [0.9, 1.0]])
+
+    data = event._data # dict[tuple, EventData]
+    event = Event.from_data(data, name="test_event")
 
 def test_events_initialization():
     parent = Mock()

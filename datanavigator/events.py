@@ -154,7 +154,7 @@ class Event:
         self.name = name
         assert isinstance(size, int) and size > 0
         self.size = size
-        self.fname = fname
+        self.fname = str(fname)
         self.data_id_func = data_id_func
         if isinstance(color, int):
             color = PLOT_COLORS[color]
@@ -243,24 +243,35 @@ class Event:
         Returns:
             Event: The created Event object.
         """
+        def _get_uniform_size(event_times_list: List[List]) -> int:
+            size_set = set([len(x) for x in event_times_list])
+            if len(size_set) == 1:
+                return size_set.pop()
+            raise ValueError("All events must have the same size.")
+        
+        def _1d_to_2d(x: List) -> List:
+            v = np.asarray(x)
+            if v.ndim == 1:  # passing in a list events of size 1, e.g., [1, 2, 3, 4]. Turn it into [[1], [2], [3], [4]]
+                v = v[:, np.newaxis]
+                return [list(vi) for vi in v]
+            return x
+
         algorithm_info = dict(
             tags=kwargs.pop("tags", []),
             algorithm_name=kwargs.pop("algorithm_name", ""),
             params=kwargs.pop("params", {}),
         )
 
+        for key, val in data.items():
+            if not isinstance(val, EventData):
+                val = _1d_to_2d(val)
+                data[key] = EventData(default=val, **algorithm_info)
+
         size = []
         for key, val in data.items():
-            if isinstance(val, EventData):
-                continue
-            v = np.asarray(val)
-            if v.ndim == 1:  # passing in a list events of size 1
-                v = v[:, np.newaxis]
-                val = [list(x) for x in v]
-            data[key] = EventData(default=val, **algorithm_info)
-            if len(data[key]) > 0:
-                # when there are no events, size cannot be inferred for that trial. Note that this process will fail if there are no events in ANY of the trials. size has to be passed in with kwargs.
-                size.append(v.shape[-1])
+            # when there are no events, size cannot be inferred for that trial. Note that this process will fail if there are no events in ANY of the trials. size has to be passed in with kwargs.
+            if len(val) > 0:
+                size.append(_get_uniform_size(data[key].get_times()))
 
         if not size:
             # if there were no events in the data that was passed!
@@ -276,8 +287,13 @@ class Event:
             del kwargs["size"]
 
         ret = cls(name, size, fname, **kwargs)
+        if ret.pick_action == "overwrite":
+            for key in data:
+                data[key].default = data[key].default[-1:]  # keep only the last one
         ret._data = data
-        if utils.is_path_exists_or_creatable(fname):
+
+        # save the file if file name either exists or is creatable
+        if utils.is_path_exists_or_creatable(str(fname)):
             if (not os.path.exists(fname)) or overwrite:
                 ret.save()
             else:
@@ -423,12 +439,15 @@ class Event:
         if self.pick_action == "append":
             self._data[data_id].added.append(sequence)
         else: # overwrite
-            self._data[data_id].added = [sequence]
-            assert len(self._data[data_id].default) in (0, 1)
+            if len(self._data[data_id].default) not in (0, 1):
+                # reset the buffer
+                self._buffer = []
+                raise AssertionError("Overwrite mode can only be used when there is at most one default event.")
             if len(self._data[data_id].default) == 1:
                 # remove the event in default and add the new one to added
                 self._data[data_id].removed.append(self._data[data_id].default[0])
                 self._data[data_id].default = []
+            self._data[data_id].added = [sequence]
 
         print(self.name, "add", data_id, sequence)
         self._buffer = []
@@ -597,7 +616,8 @@ class Event:
         """Convert the event data to a dictionary."""
         event_data = self._data
         if self.pick_action == "overwrite":
-            ret = {k: v.get_times()[:1] for k, v in event_data.items()}
+            # keep only the last one - this won't work because get_times will sort the events
+            ret = {k: (v.default + v.added)[-1:] for k, v in event_data.items()}
         else:
             ret = {k: v.get_times() for k, v in event_data.items()}
         return ret
