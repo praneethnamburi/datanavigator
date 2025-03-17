@@ -357,14 +357,14 @@ def test_event_to_portions():
     with pytest.raises(AssertionError):
         event.to_portions() # only works for 2-events
 
-def test_events_initialization():
-    parent = Mock()
-    events = Events(parent)
-    assert events.parent == parent
+def test_events_initialization(matplotlib_figure):
+    figure, ax = matplotlib_figure
+    events = Events(figure)
+    assert events.parent == figure
 
-def test_events_add():
-    parent = Mock()
-    events = Events(parent)
+def test_events_add(matplotlib_figure):
+    figure, ax = matplotlib_figure
+    events = Events(figure)
     data_id_func = lambda: "test_id"
     event = events.add(name="test_event", size=2, fname="test.json", data_id_func=data_id_func, color="blue")
     assert event.name == "test_event"
