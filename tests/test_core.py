@@ -5,7 +5,6 @@ from matplotlib import pyplot as plt
 from matplotlib.backend_bases import KeyEvent
 from unittest.mock import MagicMock, patch
 from datanavigator.core import GenericBrowser
-from datanavigator.utils import TextView
 
 @pytest.fixture(scope="module")
 def matplotlib_figure():
