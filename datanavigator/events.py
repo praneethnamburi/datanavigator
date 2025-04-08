@@ -134,10 +134,8 @@ class EventData:
         """Convert the event times to portions."""
         return functools.reduce(
             lambda a, b: a | b,
-            [
-                portion.closed(*interval_limits)
-                for interval_limits in self.get_times()
-            ],
+            [portion.closed(*interval_limits) for interval_limits in self.get_times()],
+            portion.empty()
         )
 
     def __and__(self, other: EventData) -> EventData:
@@ -660,6 +658,7 @@ class Event:
     def to_portions(self) -> Dict:
         """Convert the event data to portions."""
         assert self.size == 2
+        return {signal_id: event_data.to_portions() for signal_id, event_data in self._data.items()}
         ret = {}
         for signal_id, signal_events in self.to_dict().items():
             ret[signal_id] = functools.reduce(

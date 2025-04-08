@@ -41,7 +41,7 @@ class SignalBrowser(GenericBrowser):
         if isinstance(this_data, pysampled.Data):
             self._plot = self._ax.plot(this_data.t, this_data())
         else:
-            self._plot = self._ax.plot(this_data)
+            self._plot, = self._ax.plot(this_data)
 
         self.data = plot_data
         if titlefunc is None:
@@ -74,7 +74,7 @@ class SignalBrowser(GenericBrowser):
             for plot_handle, this_data_to_plot in zip(self._plot, data_to_plot):
                 plot_handle.set_data(this_data_to_plot.t, this_data_to_plot())
         else:
-            self._plot.set_ydata()
+            self._plot.set_ydata(this_data)
         self._ax.set_title(self.titlefunc(self))
         if "Auto limits" in self.buttons and self.buttons["Auto limits"].state: # is True
             self.reset_axes()

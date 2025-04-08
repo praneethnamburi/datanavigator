@@ -2,35 +2,10 @@ import pytest
 import numpy as np
 import matplotlib as mpl
 from matplotlib import pyplot as plt
-from matplotlib.backend_bases import KeyEvent
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 from datanavigator.core import GenericBrowser
 
-@pytest.fixture(scope="module")
-def matplotlib_figure():
-    # Set up: create the figure and axis
-    fig, ax = plt.subplots()
-    ax.plot([0, 1], [0, 1])
-    yield fig, ax
-    # Tear down: close the figure
-    plt.close(fig)
-
-def simulate_key_press(figure, key='a'):
-    """
-    Simulate a key press event on the given axis.
-
-    Args:
-        fax (tuple): A tuple containing the figure and axis (fig, ax).
-        key (str, optional): The key to press. Defaults to 'a'.
-    """
-    # Create a KeyEvent
-    event = KeyEvent(
-        name='key_press_event',
-        canvas=figure.canvas,
-        key=key,
-        guiEvent=None,
-    )
-    return event
+from tests.conftest import simulate_key_press
 
 def test_browser_initialization():
     GenericBrowser()

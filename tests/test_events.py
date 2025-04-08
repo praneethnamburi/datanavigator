@@ -1,54 +1,17 @@
 import pytest
 import os
 import numpy as np
-from unittest.mock import Mock
-from matplotlib.backend_bases import MouseEvent
 import matplotlib.pyplot as plt
 
 from datanavigator import events
 from datanavigator.events import portion, EventData, Event, Events, _find_nearest_idx_val
 
-
-@pytest.fixture(scope="module")
-def matplotlib_figure():
-    # Set up: create the figure and axis
-    fig, ax = plt.subplots()
-    ax.plot([0, 1], [0, 1])
-    yield fig, ax
-    # Tear down: close the figure
-    plt.close(fig)
+from tests.conftest import simulate_mouse_click
 
 
 @pytest.fixture(scope="module")
 def event_file_path(tmp_path_factory):
     return tmp_path_factory.mktemp("data") / "picked_event.json"
-
-
-def simulate_mouse_click(fax, xdata=0.5, ydata=0.5, button=1):
-    """
-    Simulate a mouse click event on the given axis.
-
-    Args:
-        ax (matplotlib.axes.Axes): The axis to click on.
-        xdata (float): The x-coordinate of the click.
-        ydata (float): The y-coordinate of the click.
-        button (int, optional): The mouse button to use (1 for left, 2 for middle, 3 for right). Defaults to 1.
-    """
-    fig, ax = fax    
-    # Create a MouseEvent
-    event = MouseEvent(
-        name='button_press_event',
-        canvas=ax.figure.canvas,
-        x=ax.transData.transform((xdata, ydata))[0],
-        y=ax.transData.transform((xdata, ydata))[1],
-        button=button,
-        key=None,
-        step=0,
-        dblclick=False,
-        guiEvent=None,
-    )
-    return event
-
 
 def test_portion():
     p = portion.closed(1, 2) | portion.closed(3, 5.4)
