@@ -258,6 +258,33 @@ class Video(VideoReader):
         """
         return cv.cvtColor(self[frame_num].asnumpy(), cv.COLOR_BGR2GRAY)
 
+def removeprefix(s: str, prefix: str) -> str:
+    """Remove the specified prefix from the string, if present.
+
+    Args:
+        s (str): The original string.
+        prefix (str): The prefix to remove.
+
+    Returns:
+        str: The string with the prefix removed, if it starts with the prefix.
+    """
+    if s.startswith(prefix):
+        return s[len(prefix):]
+    return s
+
+def removesuffix(s: str, suffix: str) -> str:
+    """Remove the specified suffix from the string, if present.
+
+    Args:
+        s (str): The original string.
+        suffix (str): The suffix to remove.
+
+    Returns:
+        str: The string with the suffix removed, if it ends with the suffix.
+    """
+    if s.endswith(suffix):
+        return s[:-len(suffix)]
+    return s
 
 ### ------- FROM STACK OVERFLOW
 # Sadly, Python fails to provide the following magic number for us.
