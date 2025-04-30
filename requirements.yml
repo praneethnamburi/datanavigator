@@ -11,7 +11,10 @@ dependencies:
   - opencv
   - portion
   - ffmpeg-python
+  - dill
+  - tqdm
   - pip:
     - opencv-contrib-python
     - pysampled
     - decord
+    - tables
