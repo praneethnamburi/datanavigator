@@ -608,7 +608,7 @@ class Event:
         for ax, plot_handle in zip(self.ax_list, self.plot_handles):
             yl = self._get_ylim(ax)
             plot_handle.set_data(
-                *utils.ticks_from_times(self.get_current_event_times(), yl)
+                *utils.ticks_from_times(list(np.asarray(self.get_current_event_times()).flatten()), yl)
             )
         if draw:
             plt.draw()

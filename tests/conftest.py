@@ -50,6 +50,36 @@ def simulate_key_press(figure, key='a'):
     )
     return event
 
+def simulate_key_press_at_xy(fax, key='1', xdata=0.5, ydata=0.5):
+    """
+    Simulate a key press event on the given axis with the mouse positioned
+    at a specific data coordinate. Adds 'xdata' and 'ydata' attributes
+    to the event object.
+
+    Args:
+        fax (tuple): A tuple containing the figure and axis (fig, ax).
+        key (str, optional): The key to press. Defaults to '1'.
+        xdata (float, optional): The x-coordinate in data space. Defaults to 0.5.
+        ydata (float, optional): The y-coordinate in data space. Defaults to 0.5.
+    """
+    fig, ax = fax
+    # Convert the data coordinates to canvas coordinates
+    x_pixel, y_pixel = ax.transData.transform((xdata, ydata))
+    # Create a KeyEvent with pixel position information
+    event = KeyEvent(
+        name='key_press_event',
+        canvas=fig.canvas,
+        key=key,
+        x=x_pixel,
+        y=y_pixel,
+        guiEvent=None,
+    )
+    # Manually add the data coordinates to the event object
+    event.xdata = xdata
+    event.ydata = ydata
+    # Add the axes attribute, similar to MouseEvent
+    event.inaxes = ax
+    return event
 
 def simulate_mouse_click(fax, xdata=0.5, ydata=0.5, button=1):
     """

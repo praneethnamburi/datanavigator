@@ -1,23 +1,26 @@
 """
 This module contains various demo classes for signal browsing, event picking, button interactions,
-and selection using matplotlib widgets.
+and selection using matplotlib widgets. It also includes a utility function to download
+a sample video file.
+
+Functions:
+    get_example_video: Downloads a sample video file for demonstration purposes.
 
 Classes:
-    EventPicker: A class for picking events from signal data.
-    ButtonDemo: A class demonstrating button interactions using matplotlib.
-    SelectorDemo: A class demonstrating selection of points using LassoSelector.
-    SignalBrowserKeyPress: A class for signal browsing with key press features.
+    EventPickerDemo: Demonstrates browsing signals and picking events of varying sizes using SignalBrowser.
+    ButtonDemo: Shows how to create and interact with custom buttons on a Matplotlib figure.
+    SelectorDemo: Illustrates selecting data points on a plot using the LassoSelector widget.
 """
 
 import os
 import urllib.request
-from pathlib import Path
-from typing import Callable, Optional, Any, List
+from typing import Optional, Any
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pysampled
 from matplotlib.widgets import LassoSelector as LassoSelectorWidget
+from matplotlib.path import Path
 
 from . import _config
 from .core import Buttons
@@ -25,7 +28,26 @@ from .signals import SignalBrowser
 
 
 def get_example_video(dest_folder: str=None, source_url: str=None) -> str:
-    """Download a sample video and return the path to that video."""
+    """
+    Download a sample video file if it doesn't exist locally and return its path.
+
+    Uses a default destination folder and source URL if none are provided.
+    The default destination is retrieved from `_config.get_clip_folder()`.
+    The default source URL points to a small jellyfish video.
+
+    Args:
+        dest_folder (str, optional): The folder where the video should be saved.
+            Defaults to the folder specified in the configuration.
+        source_url (str, optional): The URL from which to download the video.
+            Defaults to a known test video URL.
+
+    Returns:
+        str: The local file path to the downloaded (or existing) video.
+
+    Raises:
+        AssertionError: If a `dest_folder` is provided but does not exist.
+        urllib.error.URLError: If the video download fails (e.g., network issue, invalid URL).
+    """
     if dest_folder is None:
         dest_folder = _config.get_clip_folder()
     else:
@@ -51,11 +73,35 @@ def get_example_video(dest_folder: str=None, source_url: str=None) -> str:
 
 class EventPickerDemo(SignalBrowser):
     """
-    A class demonstrating how to browse 10 (white noise) signals and pick events of different sizes.
-    It demonstrates how to extend :py:class:`datanavigator.SignalBrowser`.
+    Demonstrates browsing signals and picking events using the SignalBrowser.
+
+    This class extends SignalBrowser to showcase how to:
+    - Load multiple signals (random noise in this case).
+    - Define and manage different types of events ('pick1', 'pick2', 'pick3')
+      with varying sizes and picking behaviors ('append', 'overwrite').
+    - Assign keyboard shortcuts for adding, removing, and saving events.
+    - Customize event display (line vs. fill).
+    - Override the `update` method to ensure event displays are refreshed.
+
+    Key Bindings:
+        '1': Add a 'pick1' event (size 1, append).
+        'alt+1': Remove the nearest 'pick1' event.
+        'ctrl+1': Save 'pick1' events to file.
+        '2': Add a 'pick2' event (size 2, append, fill display).
+        'alt+2': Remove the nearest 'pick2' event.
+        'ctrl+2': Save 'pick2' events to file.
+        '3': Add a 'pick3' event (size 3, overwrite).
+        'alt+3': Remove the nearest 'pick3' event.
+        'ctrl+3': Save 'pick3' events to file.
     """
 
     def __init__(self) -> None:
+        """
+        Initializes the EventPickerDemo.
+
+        Sets up 10 random signals, configures three event types with different
+        properties and key bindings, and performs an initial plot update.
+        """
         plot_data = [
             pysampled.Data(
                 np.random.rand(100), sr=10, meta={"id": f"sig{sig_count:02d}"}
@@ -90,6 +136,7 @@ class EventPickerDemo(SignalBrowser):
             remove_key="alt+2",
             save_key="ctrl+2",
             linewidth=1.5,
+            display_type="fill",
         )
         self.events.add(
             name="pick3",
@@ -113,9 +160,24 @@ class EventPickerDemo(SignalBrowser):
 
 
 class ButtonDemo(plt.Figure):
-    """A class demonstrating button interactions using matplotlib."""
+    """
+    Demonstrates creating and using custom buttons within a Matplotlib figure.
+
+    This class creates a figure and adds two buttons using the `datanavigator.core.Buttons` manager:
+    - A 'Toggle' button.
+    - A 'Push' button that triggers a callback function (`test_callback`) when clicked.
+    """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        """
+        Initializes the ButtonDemo figure.
+
+        Creates the figure, adds a toggle and a push button, and displays the figure.
+
+        Args:
+            *args: Variable length argument list passed to the parent plt.Figure.
+            **kwargs: Arbitrary keyword arguments passed to the parent plt.Figure.
+        """
         super().__init__(*args, **kwargs)
         self.buttons = Buttons(parent=self)
         self.buttons.add(text="test", type_="Toggle")
@@ -125,14 +187,35 @@ class ButtonDemo(plt.Figure):
         plt.show(block=False)
 
     def test_callback(self, event: Optional[Any] = None) -> None:
-        """Demo callback function for button press events. Simply prints the event at the console."""
+        """
+        Callback function executed when the 'push button' is clicked.
+
+        Prints the triggering mouse event to the console.
+
+        Args:
+            event (Optional[Any], optional): The matplotlib event object associated
+                with the button click. Defaults to None.
+        """
         print(event)
 
 
 class SelectorDemo:
-    """A class demonstrating selection of points using LassoSelector."""
+    """
+    Demonstrates using the Matplotlib LassoSelector widget to select data points.
+
+    Creates a scatter plot and adds buttons to start and stop the lasso selection mode.
+    Selected points are highlighted, and selections can be toggled (selecting an already
+    selected point unselects it).
+    """
 
     def __init__(self) -> None:
+        """
+        Initializes the SelectorDemo.
+
+        Creates a figure with axes, adds control buttons, plots random data,
+        and activates the lasso selector. Sets a random seed for reproducible data.
+        """
+        np.random.seed(42) # Set random seed for reproducibility
         f, ax = plt.subplots(1, 1)
         self.buttons = Buttons(parent=f)
         self.buttons.add(text="Start selection", type_="Push", action_func=self.start)
@@ -148,11 +231,29 @@ class SelectorDemo:
         self.ind = set()
 
     def get_points(self) -> np.ndarray:
-        """Get the points to be selected."""
+        """
+        Returns the data points currently plotted on the axes.
+
+        Used by the LassoSelector to determine which points are inside the lasso path.
+
+        Returns:
+            np.ndarray: A 2D array where each row is (t, x) coordinate of a point.
+        """
         return np.vstack((self.t, self.x)).T
 
     def onselect(self, verts: list) -> None:
-        """Select if not previously selected; Unselect if previously selected."""
+        """
+        Callback function executed when a lasso selection is completed.
+
+        Determines which points fall within the lasso path defined by `verts`.
+        Updates the set of selected indices (`self.ind`), toggling the selection
+        state for points within the lasso. Refreshes the plot to show the
+        currently selected points.
+
+        Args:
+            verts (list): A list of (x, y) tuples defining the vertices of the
+                lasso path in display coordinates.
+        """
         path = Path(verts)
         selected_ind = set(np.nonzero(path.contains_points(self.get_points()))[0])
         existing_ind = self.ind.intersection(selected_ind)
@@ -166,62 +267,23 @@ class SelectorDemo:
         plt.draw()
 
     def start(self, event: Optional[Any] = None) -> None:
-        """Start the LassoSelector."""
+        """
+        Activates the LassoSelector widget.
+
+        Connected as the callback for the 'Start selection' button.
+
+        Args:
+            event (Optional[Any], optional): The event triggering the start. Defaults to None.
+        """
         self.lasso = LassoSelectorWidget(self.ax, onselect=self.onselect)
 
     def stop(self, event: Optional[Any] = None) -> None:
-        """Stop the LassoSelector."""
+        """
+        Deactivates the LassoSelector widget.
+
+        Connected as the callback for the 'Stop selection' button.
+
+        Args:
+            event (Optional[Any], optional): The event triggering the stop. Defaults to None.
+        """
         self.lasso.disconnect_events()
-
-
-# ComponentBrowser
-    # import projects.gaitmusic as gm
-    # mr = gm.MusicRunning01()
-    # lf = mr(10).ot
-    # sig_pieces = gm.gait_phase_analysis(lf, muscle_line_name='RSBL_Upper', target_samples=500)
-    # gui.ComponentBrowser(sig_pieces)
-
-    # Single-click on scatter plots to select a gait cycle.
-    # Press r to refresh 'recent history' plots.
-    # Double click on the time course plot to select a gait cycle from the time series plot.
-
-class SignalBrowserKeyPress(SignalBrowser):
-    """This demonstrates the old way of handling key press events in SignalBrowser. See :py:class:`EventPicker` for the new way."""
-
-    def __init__(
-        self,
-        plot_data: List[pysampled.Data],  # Use List from typing module
-        titlefunc: Optional[Callable] = None,
-        figure_handle: Optional[Any] = None,
-        reset_on_change: bool = False,
-    ) -> None:
-        super().__init__(plot_data, titlefunc, figure_handle, reset_on_change)
-        self.event_keys = {"1": [], "2": [], "3": [], "t": [], "d": []}
-
-    def __call__(self, event: Any) -> None:
-        """Handle key press events."""
-        from pprint import pprint
-
-        super().__call__(event)
-        if event.name == "key_press_event":
-            sr = self.data[self._current_idx].sr
-            if event.key in self.event_keys:
-                if event.key == "1":
-                    self.first = int(float(event.xdata) * sr)
-                    self.event_keys[event.key].append(self.first)
-                    print(f"first: {self.first}")
-                elif event.key == "2":
-                    self.second = int(float(event.xdata) * sr)
-                    self.event_keys[event.key].append(self.second)
-                    print(f"second: {self.second}")
-                elif event.key == "3":
-                    self.third = int(float(event.xdata) * sr)
-                    self.event_keys[event.key].append(self.third)
-                    print(f"third: {self.third}")
-                elif event.key == "t":
-                    pprint(self.event_keys, width=1)
-                    self.export = self.event_keys
-                elif event.key == "d":
-                    for key in self.event_keys:
-                        self.event_keys[key].clear()
-                    pprint(self.event_keys, width=1)
