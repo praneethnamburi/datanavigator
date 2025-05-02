@@ -16,7 +16,8 @@ dependencies = [
     "portion",
     "ffmpeg-python",
     "pysampled",
-    "decord"
+    "decord",
+    "tables"
 ]
 license = {file = "LICENSE"}
 classifiers = [
