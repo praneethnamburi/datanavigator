@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 from matplotlib.backend_bases import KeyEvent
 from matplotlib.backend_bases import MouseEvent
 
+import datanavigator
+
 @pytest.fixture(scope="module")
 def matplotlib_figure():
     # used by test_events and test_core
@@ -73,3 +75,58 @@ def simulate_mouse_click(fax, xdata=0.5, ydata=0.5, button=1):
         guiEvent=None,
     )
     return event
+
+def press_browser_button(button: datanavigator.Button):
+    """
+    Simulates a mouse click on a given button in a Matplotlib-based datanavigator GUI.
+    This function triggers both a button press and a button release event
+    on the specified button, effectively simulating a full mouse click.
+
+    Args:
+        button (datanavigator.Button): The button object to be clicked. 
+            It must have an `ax` attribute representing the Matplotlib Axes 
+            associated with the button.
+
+    Raises:
+        AttributeError: If the `button` object does not have the required `ax` attribute.
+        ValueError: If the button's Axes or its associated canvas is not properly configured.
+    """
+    if not hasattr(button, "ax"):
+        raise AttributeError("The button object must have an 'ax' attribute representing its Matplotlib Axes.")
+
+    button_ax = button.ax
+    if button_ax is None or button_ax.figure is None or button_ax.figure.canvas is None:
+        raise ValueError("The button's Axes or its associated canvas is not properly configured.")
+
+    # Calculate the center position of the button in canvas coordinates
+    bbox = button_ax.get_position()
+    x = bbox.x0 + 0.5 * bbox.width
+    y = bbox.y0 + 0.5 * bbox.height
+    canvas = button_ax.figure.canvas
+    canvas_width, canvas_height = canvas.get_width_height()
+
+    # Convert normalized coordinates to canvas coordinates
+    canvas_x = canvas_width * x
+    canvas_y = canvas_height * y
+
+    # Create and process a button press event
+    press_event = MouseEvent(
+        name="button_press_event",
+        canvas=canvas,
+        x=canvas_x,
+        y=canvas_y,
+        button=1,
+        key=None,
+    )
+    canvas.callbacks.process("button_press_event", press_event)
+
+    # Create and process a button release event
+    release_event = MouseEvent(
+        name="button_release_event",
+        canvas=canvas,
+        x=canvas_x,
+        y=canvas_y,
+        button=1,
+        key=None,
+    )
+    canvas.callbacks.process("button_release_event", release_event)

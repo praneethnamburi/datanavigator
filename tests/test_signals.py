@@ -3,8 +3,9 @@ from unittest.mock import MagicMock
 from unittest.mock import Mock, patch
 from matplotlib.backend_bases import MouseEvent
 
+import datanavigator
 from datanavigator.signals import SignalBrowser
-from tests.conftest import simulate_key_press
+from tests.conftest import simulate_key_press, press_browser_button
 
 
 def test_signal_browser_init_with_pysampled_data(signal_list, mock_figure):
@@ -54,43 +55,27 @@ def test_signal_browser_buttons_added(signal_list, mock_figure):
     browser.buttons.add(
         text="Right",
         type_="Push",
-        action_func=browser.increment,
+        action_func=(lambda s, event: s.increment(step=1)).__get__(browser),
+    )
+    browser.update()
+
+    # Add the "Right" button
+    browser.buttons.add(
+        text="Left",
+        type_="Push",
+        action_func=(lambda s, event: s.decrement(step=1)).__get__(browser),
     )
     browser.update()
     
-    # Get the "Right" button's Axes
-    right_button = browser.buttons["Right"]
-    button_ax = right_button.ax
-
-    # Simulate a mouse click on the button
-    x, y = button_ax.get_position().x0 + 0.5 * button_ax.get_position().width, \
-           button_ax.get_position().y0 + 0.5 * button_ax.get_position().height
-    canvas = button_ax.figure.canvas
-    canvas_width, canvas_height = canvas.get_width_height()
-
-    # Create and process a button press event
-    press_event = MouseEvent(
-        name="button_press_event",
-        canvas=canvas,
-        x=canvas_width * x,
-        y=canvas_height * y,
-        button=1,
-        key=None,
-    )
-    browser(press_event)
-
-    # Create and process a button release event
-    release_event = MouseEvent(
-        name="button_release_event",
-        canvas=canvas,
-        x=canvas_width * x,
-        y=canvas_height * y,
-        button=1,
-        key=None,
-    )
-    canvas.callbacks.process("button_release_event", release_event)
-
     # Assert that the increment method was called
+    press_browser_button(browser.buttons["Right"])
     assert browser._current_idx == 1
     assert browser.titlefunc(browser) == "Plot number 1"
 
+    assert browser.buttons["Auto limits"].state is False
+    press_browser_button(browser.buttons["Auto limits"])
+    assert browser.buttons["Auto limits"].state is True
+
+    press_browser_button(browser.buttons["Left"])
+    assert browser._current_idx == 0
+    assert browser.titlefunc(browser) == "Plot number 0"
