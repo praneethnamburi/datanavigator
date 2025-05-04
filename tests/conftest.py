@@ -7,6 +7,7 @@ from matplotlib.backend_bases import MouseEvent
 
 import datanavigator
 
+
 @pytest.fixture(scope="module")
 def matplotlib_figure():
     # used by test_events and test_core
@@ -17,12 +18,14 @@ def matplotlib_figure():
     # Tear down: close the figure
     plt.close(fig)
 
+
 @pytest.fixture
 def mock_figure():
     """Fixture to mock a matplotlib figure."""
     fig = plt.figure()
     yield fig
     plt.close(fig)
+
 
 @pytest.fixture
 def signal_list():
@@ -33,7 +36,8 @@ def signal_list():
         pysampled.generate_signal("three_sine_waves"),
     ]
 
-def simulate_key_press(figure, key='a'):
+
+def simulate_key_press(figure, key="a"):
     """
     Simulate a key press event on the given axis.
 
@@ -43,14 +47,15 @@ def simulate_key_press(figure, key='a'):
     """
     # Create a KeyEvent
     event = KeyEvent(
-        name='key_press_event',
+        name="key_press_event",
         canvas=figure.canvas,
         key=key,
         guiEvent=None,
     )
     return event
 
-def simulate_key_press_at_xy(fax, key='1', xdata=0.5, ydata=0.5):
+
+def simulate_key_press_at_xy(fax, key="1", xdata=0.5, ydata=0.5):
     """
     Simulate a key press event on the given axis with the mouse positioned
     at a specific data coordinate. Adds 'xdata' and 'ydata' attributes
@@ -67,7 +72,7 @@ def simulate_key_press_at_xy(fax, key='1', xdata=0.5, ydata=0.5):
     x_pixel, y_pixel = ax.transData.transform((xdata, ydata))
     # Create a KeyEvent with pixel position information
     event = KeyEvent(
-        name='key_press_event',
+        name="key_press_event",
         canvas=fig.canvas,
         key=key,
         x=x_pixel,
@@ -81,6 +86,7 @@ def simulate_key_press_at_xy(fax, key='1', xdata=0.5, ydata=0.5):
     event.inaxes = ax
     return event
 
+
 def simulate_mouse_click(fax, xdata=0.5, ydata=0.5, button=1):
     """
     Simulate a mouse click event on the given axis.
@@ -91,10 +97,10 @@ def simulate_mouse_click(fax, xdata=0.5, ydata=0.5, button=1):
         ydata (float): The y-coordinate of the click.
         button (int, optional): The mouse button to use (1 for left, 2 for middle, 3 for right). Defaults to 1.
     """
-    fig, ax = fax    
+    fig, ax = fax
     # Create a MouseEvent
     event = MouseEvent(
-        name='button_press_event',
+        name="button_press_event",
         canvas=ax.figure.canvas,
         x=ax.transData.transform((xdata, ydata))[0],
         y=ax.transData.transform((xdata, ydata))[1],
@@ -106,6 +112,7 @@ def simulate_mouse_click(fax, xdata=0.5, ydata=0.5, button=1):
     )
     return event
 
+
 def press_browser_button(button: datanavigator.Button):
     """
     Simulates a mouse click on a given button in a Matplotlib-based datanavigator GUI.
@@ -113,8 +120,8 @@ def press_browser_button(button: datanavigator.Button):
     on the specified button, effectively simulating a full mouse click.
 
     Args:
-        button (datanavigator.Button): The button object to be clicked. 
-            It must have an `ax` attribute representing the Matplotlib Axes 
+        button (datanavigator.Button): The button object to be clicked.
+            It must have an `ax` attribute representing the Matplotlib Axes
             associated with the button.
 
     Raises:
@@ -122,11 +129,15 @@ def press_browser_button(button: datanavigator.Button):
         ValueError: If the button's Axes or its associated canvas is not properly configured.
     """
     if not hasattr(button, "ax"):
-        raise AttributeError("The button object must have an 'ax' attribute representing its Matplotlib Axes.")
+        raise AttributeError(
+            "The button object must have an 'ax' attribute representing its Matplotlib Axes."
+        )
 
     button_ax = button.ax
     if button_ax is None or button_ax.figure is None or button_ax.figure.canvas is None:
-        raise ValueError("The button's Axes or its associated canvas is not properly configured.")
+        raise ValueError(
+            "The button's Axes or its associated canvas is not properly configured."
+        )
 
     # Calculate the center position of the button in canvas coordinates
     bbox = button_ax.get_position()

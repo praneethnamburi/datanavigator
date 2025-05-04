@@ -50,8 +50,11 @@ def test_default_clip_and_cache_folder():
     """Test default clip and cache folder values."""
     curr_clip_folder = get_clip_folder()
     curr_cache_folder = get_cache_folder()
-    with patch.dict(os.environ, {"CLIP_FOLDER": "C:\\test_clip", "CACHE_FOLDER": "C:\\test_cache"}):
+    with patch.dict(
+        os.environ, {"CLIP_FOLDER": "C:\\test_clip", "CACHE_FOLDER": "C:\\test_cache"}
+    ):
         from importlib import reload
+
         reload(datanavigator._config)
         assert get_clip_folder() == "C:\\test_clip"
         assert get_cache_folder() == "C:\\test_cache"

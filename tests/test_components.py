@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 # and the current file is tests/test_components.py
 # and the module to test is datanavigator/components.py
 
+
 @pytest.fixture
 def component_data():
     """Fixture for sample ComponentBrowser data."""
@@ -19,15 +20,18 @@ def component_data():
     n_components = 3
     data = np.random.randn(n_signals, n_timepts)
     data_transform = np.random.randn(n_signals, n_components)
-    labels = np.random.randint(0, 3, n_signals) # Labels 0, 1, 2
+    labels = np.random.randint(0, 3, n_signals)  # Labels 0, 1, 2
     class_names = {0: "Class_0", 1: "Class_1", 2: "Class_2"}
     return data, data_transform, labels, class_names
+
 
 def test_component_browser_init_defaults(component_data, mock_figure):
     """Test initialization with minimal arguments."""
     data, data_transform, _, _ = component_data
-    with patch('matplotlib.pyplot.show'): # Prevent plot window from showing
-        browser = ComponentBrowser(data=data, data_transform=data_transform, figure_handle=mock_figure)
+    with patch("matplotlib.pyplot.show"):  # Prevent plot window from showing
+        browser = ComponentBrowser(
+            data=data, data_transform=data_transform, figure_handle=mock_figure
+        )
 
     assert browser.data is data
     assert browser.n_signals == data.shape[0]
@@ -35,9 +39,16 @@ def test_component_browser_init_defaults(component_data, mock_figure):
     assert np.array_equal(browser.labels, np.zeros(data.shape[0], dtype=int))
     assert browser.class_names == {0: "Class_0"}
     assert browser.desired_class_names == {0: "Class_0"}
-    assert browser.annotation_names == {1: "Representative", 2: "Best", 3: "Noisy", 4: "Worst"}
+    assert browser.annotation_names == {
+        1: "Representative",
+        2: "Best",
+        3: "Noisy",
+        4: "Worst",
+    }
     assert browser._mode == "correction"
-    assert len(browser.plot_handles["ax_pca"]) == 3 # n_components * (n_components - 1) / 2 = 3 * 2 / 2 = 3
+    assert (
+        len(browser.plot_handles["ax_pca"]) == 3
+    )  # n_components * (n_components - 1) / 2 = 3 * 2 / 2 = 3
     assert len(browser.plot_handles["signal_plots"]) == browser.n_signals
     assert len(browser.plot_handles["signal_full"]) == browser.n_signals
     assert browser._class_info_text is not None
@@ -46,17 +57,24 @@ def test_component_browser_init_defaults(component_data, mock_figure):
     assert browser._message is not None
     assert browser._desired_class_info_text is not None
 
+
 def test_component_browser_init_with_labels(component_data, mock_figure):
     """Test initialization with provided labels."""
     data, data_transform, labels, class_names = component_data
-    with patch('matplotlib.pyplot.show'):
-        browser = ComponentBrowser(data=data, data_transform=data_transform, labels=labels, figure_handle=mock_figure)
+    with patch("matplotlib.pyplot.show"):
+        browser = ComponentBrowser(
+            data=data,
+            data_transform=data_transform,
+            labels=labels,
+            figure_handle=mock_figure,
+        )
 
     assert np.array_equal(browser.labels, labels)
     assert browser.class_names == class_names
     assert browser.n_classes == len(np.unique(labels))
     assert len(browser.classes) == browser.n_signals
     assert all(isinstance(c, ClassLabel) for c in browser.classes)
+
 
 def test_component_browser_init_with_names(component_data, mock_figure):
     """Test initialization with provided class_names, desired_class_names, and annotation_names."""
@@ -65,7 +83,7 @@ def test_component_browser_init_with_names(component_data, mock_figure):
     custom_desired_names = {0: "Desired_0", 1: "Desired_1", 2: "Desired_2"}
     custom_annotation_names = {1: "Annot_A", 2: "Annot_B"}
 
-    with patch('matplotlib.pyplot.show'):
+    with patch("matplotlib.pyplot.show"):
         browser = ComponentBrowser(
             data=data,
             data_transform=data_transform,
@@ -73,19 +91,27 @@ def test_component_browser_init_with_names(component_data, mock_figure):
             class_names=custom_class_names,
             desired_class_names=custom_desired_names,
             annotation_names=custom_annotation_names,
-            figure_handle=mock_figure
+            figure_handle=mock_figure,
         )
 
     assert browser.class_names == custom_class_names
     assert browser.desired_class_names == custom_desired_names
     assert browser.annotation_names == custom_annotation_names
-    assert browser._annotation_text.text[-len(custom_annotation_names):] == [f"{k}:{v}" for k,v in custom_annotation_names.items()]
+    assert browser._annotation_text.text[-len(custom_annotation_names) :] == [
+        f"{k}:{v}" for k, v in custom_annotation_names.items()
+    ]
+
 
 def test_component_browser_properties(component_data, mock_figure):
     """Test properties of the ComponentBrowser."""
     data, data_transform, labels, _ = component_data
-    with patch('matplotlib.pyplot.show'):
-        browser = ComponentBrowser(data=data, data_transform=data_transform, labels=labels, figure_handle=mock_figure)
+    with patch("matplotlib.pyplot.show"):
+        browser = ComponentBrowser(
+            data=data,
+            data_transform=data_transform,
+            labels=labels,
+            figure_handle=mock_figure,
+        )
 
     assert browser.n_signals == data.shape[0]
     assert browser.n_timepts == data.shape[1]
@@ -95,38 +121,50 @@ def test_component_browser_properties(component_data, mock_figure):
     assert browser.signal._sig.shape == (data.size,)
     assert browser.signal.sr == browser.n_timepts
 
-@patch('matplotlib.pyplot.draw')
+
+@patch("matplotlib.pyplot.draw")
 def test_component_browser_event_pick(mock_draw, component_data, mock_figure):
     """Test the onpick event handler."""
     data, data_transform, labels, _ = component_data
-    with patch('matplotlib.pyplot.show'):
-        browser = ComponentBrowser(data=data, data_transform=data_transform, labels=labels, figure_handle=mock_figure)
+    with patch("matplotlib.pyplot.show"):
+        browser = ComponentBrowser(
+            data=data,
+            data_transform=data_transform,
+            labels=labels,
+            figure_handle=mock_figure,
+        )
 
     # Simulate a pick event
     mock_event = MagicMock()
-    mock_event.ind = [3, 5] # Indices picked
-    browser.update = MagicMock() # Mock update to avoid complex plot checks
+    mock_event.ind = [3, 5]  # Indices picked
+    browser.update = MagicMock()  # Mock update to avoid complex plot checks
 
     browser.onpick(mock_event)
 
     assert browser.pick_event is mock_event
-    assert browser._data_index in mock_event.ind # Should pick one of the indices
+    assert browser._data_index in mock_event.ind  # Should pick one of the indices
     browser.update.assert_called_once()
 
-@patch('matplotlib.pyplot.draw')
+
+@patch("matplotlib.pyplot.draw")
 def test_component_browser_event_dblclick(mock_draw, component_data, mock_figure):
     """Test the select_signal_piece_dblclick event handler."""
     data, data_transform, labels, _ = component_data
-    with patch('matplotlib.pyplot.show'):
-        browser = ComponentBrowser(data=data, data_transform=data_transform, labels=labels, figure_handle=mock_figure)
+    with patch("matplotlib.pyplot.show"):
+        browser = ComponentBrowser(
+            data=data,
+            data_transform=data_transform,
+            labels=labels,
+            figure_handle=mock_figure,
+        )
 
     # Simulate a double-click event in the correct axes
     mock_event = MagicMock()
     mock_event.inaxes = browser.plot_handles["ax_signal_full"]
     mock_event.dblclick = True
-    mock_event.xdata = 4.5 # Corresponds to signal index 4
+    mock_event.xdata = 4.5  # Corresponds to signal index 4
 
-    browser.update = MagicMock() # Mock update
+    browser.update = MagicMock()  # Mock update
 
     browser.select_signal_piece_dblclick(mock_event)
 
@@ -143,39 +181,44 @@ def test_component_browser_event_dblclick(mock_draw, component_data, mock_figure
     mock_event.dblclick = True
     mock_event.xdata = browser.n_signals + 1
     browser.select_signal_piece_dblclick(mock_event)
-    browser.update.assert_not_called() # _data_index should not change
+    browser.update.assert_not_called()  # _data_index should not change
 
-@patch('matplotlib.pyplot.draw')
+
+@patch("matplotlib.pyplot.draw")
 def test_component_browser_event_keypress(mock_draw, component_data, mock_figure):
     """Test key press events for mode toggle, clear, correction, and annotation."""
     data, data_transform, labels, class_names = component_data
     annotation_names = {1: "Annot_A", 2: "Annot_B"}
-    with patch('matplotlib.pyplot.show'):
+    with patch("matplotlib.pyplot.show"):
         browser = ComponentBrowser(
             data=data,
             data_transform=data_transform,
             labels=labels,
             class_names=class_names,
             annotation_names=annotation_names,
-            figure_handle=mock_figure
+            figure_handle=mock_figure,
         )
 
     # --- Test Mode Toggle ---
     browser.update_mode_text = MagicMock()
-    event_m = simulate_key_press_at_xy((browser.figure, browser.plot_handles["ax_signal_full"]), key='m', xdata=1.5)
+    event_m = simulate_key_press_at_xy(
+        (browser.figure, browser.plot_handles["ax_signal_full"]), key="m", xdata=1.5
+    )
     browser(event_m)
     assert browser._mode == "annotation"
     browser.update_mode_text.assert_called_once()
-    browser(event_m) # Toggle back
+    browser(event_m)  # Toggle back
     assert browser._mode == "correction"
     assert browser.update_mode_text.call_count == 2
 
     # --- Test Clear Axes ---
     browser.plot_handles["ax_history_signal"].clear = MagicMock()
-    event_r = simulate_key_press_at_xy((browser.figure, browser.plot_handles["ax_signal_full"]), key='r', xdata=1.5)
+    event_r = simulate_key_press_at_xy(
+        (browser.figure, browser.plot_handles["ax_signal_full"]), key="r", xdata=1.5
+    )
     browser(event_r)
     browser.plot_handles["ax_history_signal"].clear.assert_called_once()
-    mock_draw.assert_called() # draw is called by clear_axes
+    mock_draw.assert_called()  # draw is called by clear_axes
     mock_draw.reset_mock()
 
     # --- Test Correction Mode ---
@@ -188,7 +231,11 @@ def test_component_browser_event_keypress(mock_draw, component_data, mock_figure
     new_label = int(new_label_key)
 
     browser.update_colors = MagicMock()
-    event_correct = simulate_key_press_at_xy((browser.figure, browser.plot_handles["ax_signal_full"]), key=new_label_key, xdata=target_idx + 0.5)
+    event_correct = simulate_key_press_at_xy(
+        (browser.figure, browser.plot_handles["ax_signal_full"]),
+        key=new_label_key,
+        xdata=target_idx + 0.5,
+    )
     browser(event_correct)
 
     assert browser.classes[target_idx].label == new_label
@@ -197,48 +244,76 @@ def test_component_browser_event_keypress(mock_draw, component_data, mock_figure
 
     # Test setting back to original label (should become auto)
     browser.update_colors.reset_mock()
-    event_correct_back = simulate_key_press_at_xy((browser.figure, browser.plot_handles["ax_signal_full"]), key=str(original_label), xdata=target_idx + 0.5)
+    event_correct_back = simulate_key_press_at_xy(
+        (browser.figure, browser.plot_handles["ax_signal_full"]),
+        key=str(original_label),
+        xdata=target_idx + 0.5,
+    )
     browser(event_correct_back)
     assert browser.classes[target_idx].label == original_label
     # Check if it reverted to original assignment type or became auto if original was manual
     if browser.classes[target_idx].original_label == original_label:
-         assert browser.classes[target_idx].is_auto() # Becomes auto if key matches original_label
+        assert browser.classes[
+            target_idx
+        ].is_auto()  # Becomes auto if key matches original_label
     browser.update_colors.assert_called_once_with([target_idx])
-
 
     # --- Test Annotation Mode ---
     browser._mode = "annotation"
     target_idx_annot = 4
-    assert not browser.classes[target_idx_annot].annotations # Should be empty initially
-    annot_key = '1' # Corresponds to "Annot_A"
+    assert not browser.classes[
+        target_idx_annot
+    ].annotations  # Should be empty initially
+    annot_key = "1"  # Corresponds to "Annot_A"
     annot_name = annotation_names[int(annot_key)]
 
     browser.update_message_text = MagicMock()
-    event_annot = simulate_key_press_at_xy((browser.figure, browser.plot_handles["ax_signal_full"]), key=annot_key, xdata=target_idx_annot + 0.5)
+    event_annot = simulate_key_press_at_xy(
+        (browser.figure, browser.plot_handles["ax_signal_full"]),
+        key=annot_key,
+        xdata=target_idx_annot + 0.5,
+    )
     browser(event_annot)
 
     assert annot_name in browser.classes[target_idx_annot].annotations
     browser.update_message_text.assert_called_once()
-    assert f"Adding annotation {annot_name}" in browser.update_message_text.call_args[0][0]
+    assert (
+        f"Adding annotation {annot_name}" in browser.update_message_text.call_args[0][0]
+    )
 
     # Test adding same annotation again (should not duplicate)
     browser.update_message_text.reset_mock()
     browser(event_annot)
-    assert browser.classes[target_idx_annot].annotations.count(annot_name) == 1 # Still only one
-    browser.update_message_text.assert_not_called() # No message if annotation exists
+    assert (
+        browser.classes[target_idx_annot].annotations.count(annot_name) == 1
+    )  # Still only one
+    browser.update_message_text.assert_not_called()  # No message if annotation exists
 
     # Test invalid key in annotation mode
-    event_invalid_annot = simulate_key_press_at_xy((browser.figure, browser.plot_handles["ax_signal_full"]), key='x', xdata=target_idx_annot + 0.5)
+    event_invalid_annot = simulate_key_press_at_xy(
+        (browser.figure, browser.plot_handles["ax_signal_full"]),
+        key="x",
+        xdata=target_idx_annot + 0.5,
+    )
     browser(event_invalid_annot)
-    assert browser.classes[target_idx_annot].annotations.count(annot_name) == 1 # No change
-    browser.update_message_text.assert_not_called() # No message
+    assert (
+        browser.classes[target_idx_annot].annotations.count(annot_name) == 1
+    )  # No change
+    browser.update_message_text.assert_not_called()  # No message
 
-@patch('matplotlib.pyplot.draw')
+
+@patch("matplotlib.pyplot.draw")
 def test_component_browser_classlabels_dict(mock_draw, component_data, mock_figure):
     """Test classlabels_to_dict and set_classlabels."""
     data, data_transform, labels, class_names = component_data
-    with patch('matplotlib.pyplot.show'):
-        browser = ComponentBrowser(data=data, data_transform=data_transform, labels=labels, class_names=class_names, figure_handle=mock_figure)
+    with patch("matplotlib.pyplot.show"):
+        browser = ComponentBrowser(
+            data=data,
+            data_transform=data_transform,
+            labels=labels,
+            class_names=class_names,
+            figure_handle=mock_figure,
+        )
 
     # Get initial dict
     initial_dict = browser.classlabels_to_dict()

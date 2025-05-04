@@ -2,19 +2,16 @@
 Module for browsing and visualizing data using customizable plotting functions.
 
 Classes:
-    PlotBrowser: A browser for navigating through a list of data objects and visualizing them using a pair of setup and update plotting functions.
-
-Features:
-    - Supports single plotting functions or a combination of setup and update functions for flexible visualization.
-    - Provides interactive controls such as auto-limits and selectors for enhanced user interaction.
-    - Integrates with Matplotlib for figure and axis management.
+    PlotBrowser: A browser for navigating through a list of data objects and visualizing them using custom plotting functions.
 """
 
 from __future__ import annotations
+from typing import Union, Tuple, Any
 
 from matplotlib import pyplot as plt
 
 from .core import GenericBrowser
+
 
 class PlotBrowser(GenericBrowser):
     """
@@ -23,14 +20,20 @@ class PlotBrowser(GenericBrowser):
     Assumes that the plotting function is going to make one figure.
     """
 
-    def __init__(self, plot_data: list, plot_func: callable, figure_handle: plt.Figure = None, **plot_kwargs):
+    def __init__(
+        self,
+        plot_data: list,
+        plot_func: Union[Tuple[callable, callable], callable],
+        figure_handle: plt.Figure = None,
+        **plot_kwargs,
+    ):
         """
         Initialize the PlotBrowser.
 
         Args:
             plot_data (list): List of data objects to browse.
             plot_func (callable): Plotting function or a tuple of (setup_func, update_func).
-                
+
                 plot_func can be a tuple (setup_func, update_func), or just one plotting function - update_func
                 If only one function is supplied, figure axes will be cleared on each update.
                 setup_func takes:
@@ -73,13 +76,13 @@ class PlotBrowser(GenericBrowser):
             start_state=False,
         )
         self.memoryslots.show()
-        
+
         # if an inherited class is accessing this, then don't run the update function here
         if self.__class__.__name__ == "PlotBrowser":
             self.update()
             self.reset_axes()
             plt.show(block=False)
-        
+
         # add selectors after drawing!
         if self.plot_handles is not None:
             self.add_selectors()
@@ -103,7 +106,7 @@ class PlotBrowser(GenericBrowser):
         """
         return self.data[self._current_idx]
 
-    def update(self, event=None):
+    def update(self, event: Any = None):
         """Update the browser."""
         if self.setup_func is None:
             self.figure.clear()  # redraw the entire figure contents each time, NOT recommended
@@ -111,7 +114,9 @@ class PlotBrowser(GenericBrowser):
             self.plot_func(self.get_current_data(), self.figure, **self.plot_kwargs)
         else:
             self.memoryslots.update_display()
-            self.plot_func(self.get_current_data(), self.plot_handles, **self.plot_kwargs)
+            self.plot_func(
+                self.get_current_data(), self.plot_handles, **self.plot_kwargs
+            )
         if self.buttons["Auto limits"].state:  # is True
             self.reset_axes()
         super().update(event)

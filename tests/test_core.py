@@ -7,16 +7,24 @@ from datanavigator.core import GenericBrowser
 
 from tests.conftest import simulate_key_press
 
+
 def test_browser_initialization():
     GenericBrowser()
     GenericBrowser(figure_handle=plt.figure())
+
 
 class TestGenericBrowser:
     @pytest.fixture
     def browser(self, matplotlib_figure):
         figure, ax = matplotlib_figure
         b = GenericBrowser(figure_handle=figure)
-        b.events.add(name="test_event", size=2, fname="test.json", data_id_func=lambda: "test_id", color="blue")
+        b.events.add(
+            name="test_event",
+            size=2,
+            fname="test.json",
+            data_id_func=lambda: "test_id",
+            color="blue",
+        )
         b.statevariables.add(name="test_state", states=["state1", "state2"])
         b.statevariables.show()
         b.buttons.add(text="test_button", type_="Push", action_func=lambda: None)
@@ -110,7 +118,7 @@ class TestGenericBrowser:
         browser.go_to_start()
         browser.update = MagicMock()
         browser.increment_frac()
-        assert browser._current_idx == 50 # 20 steps to browse 1000 items
+        assert browser._current_idx == 50  # 20 steps to browse 1000 items
         browser.update.assert_called_once()
         browser._current_idx = 980
         browser.increment_frac()
@@ -167,6 +175,6 @@ class TestGenericBrowser:
         browser._current_idx = 2
         browser(event)
         assert browser.memoryslots._list["1"] == 2
-    
+
     def test_show_key_bindings(self, browser):
         browser.show_key_bindings("new")
