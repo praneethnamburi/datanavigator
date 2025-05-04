@@ -1,8 +1,6 @@
 import os
 import pytest
-import urllib.request
-import numpy as np
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import patch, MagicMock
 
 # Assuming conftest.py is in the same directory or accessible via pytest's discovery
 from .conftest import (

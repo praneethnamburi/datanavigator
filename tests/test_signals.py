@@ -1,9 +1,3 @@
-import pytest
-from unittest.mock import MagicMock
-from unittest.mock import Mock, patch
-from matplotlib.backend_bases import MouseEvent
-
-import datanavigator
 from datanavigator.signals import SignalBrowser
 from tests.conftest import simulate_key_press, press_browser_button
 

@@ -38,6 +38,7 @@ class PlotBrowser(GenericBrowser):
                     keyword arguments (same as plot_func)
                 setup_func outputs:
                     **dictionary** of plot handles that goes as the second input to update_func
+                    plot_handles["figure"] is the figure handle to be used for plotting, and is required
 
                 update_func is a plot-refreshing function that accepts 3 inputs:
                     an element in the plot_data list as its first input
@@ -53,13 +54,8 @@ class PlotBrowser(GenericBrowser):
             assert len(plot_func) == 2
             self.setup_func, self.plot_func = plot_func
             self.plot_handles = self.setup_func(self.data[0], **self.plot_kwargs)
-            plot_handle = list(self.plot_handles.values())[0]
-            if "figure" in self.plot_handles:
-                figure_handle = self.plot_handles["figure"]
-            elif isinstance(plot_handle, list):
-                figure_handle = plot_handle[0].figure
-            else:
-                figure_handle = plot_handle.figure  # figure_handle passed as input will be ignored
+            assert "figure" in self.plot_handles
+            figure_handle = self.plot_handles["figure"]
         else:
             self.setup_func, self.plot_func = None, plot_func
             self.plot_handles = None
@@ -77,12 +73,18 @@ class PlotBrowser(GenericBrowser):
             start_state=False,
         )
         self.memoryslots.show()
+        
         # if an inherited class is accessing this, then don't run the update function here
         if self.__class__.__name__ == "PlotBrowser":
             self.update()
             self.reset_axes()
             plt.show(block=False)
+        
         # add selectors after drawing!
+        if self.plot_handles is not None:
+            self.add_selectors()
+
+    def add_selectors(self):
         try:
             s0 = self.selectors.add(list(self.plot_handles.values())[0])
             self.buttons.add(
@@ -113,9 +115,4 @@ class PlotBrowser(GenericBrowser):
         if self.buttons["Auto limits"].state:  # is True
             self.reset_axes()
         super().update(event)
-        plt.draw()
-
-    def udpate_without_clear(self):
-        """Update the browser without clearing the axis."""
-        self.memoryslots.update_display()
         plt.draw()
