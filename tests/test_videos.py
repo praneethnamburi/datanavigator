@@ -4,7 +4,10 @@ from pathlib import Path
 from unittest.mock import patch
 
 import datanavigator
-from tests.conftest import simulate_key_press
+from matplotlib.backend_bases import MouseButton
+from matplotlib.backend_bases import MouseEvent
+
+from tests.conftest import simulate_key_press, simulate_mouse_click
 
 
 @pytest.fixture(scope="function")
@@ -117,4 +120,44 @@ def test_video_browser_extract_clip(video_fpath):
         assert os.path.exists(ret_name)
         assert Path(ret_name).stem == f"example_video_s{40/fps:.3f}_e{92/fps:.3f}"
         os.remove(ret_name)
+
+
+def test_video_plot_browser_init(video_fpath, signal_list):
+    # generate random signals for 10 s
+    signals = dict(zip(["white_noise", "sine_wave", "three_sine_waves"], signal_list))
+    browser = datanavigator.VideoPlotBrowser(video_fpath, signals)
+    assert browser.fps == browser.video_data.get_avg_fps() == 29.97
+    assert len(browser.video_data) == len(browser) == browser._len == 300
+
+    # test _setup
+    assert "signal0" in browser.plot_handles
+    assert "signal2_tick" in browser.plot_handles
+    # montage is the video
+    assert "montage" in browser.plot_handles
+
+    # test mouse click
+    assert browser._current_idx == 0
+    event = simulate_mouse_click(
+        (browser.figure, browser.plot_handles["signal_ax"][0]),
+        xdata=0.5, 
+        ydata=0.5,
+        button=3,
+        )
+    browser.figure.canvas.callbacks.process("button_press_event", event)
     
+    assert browser._current_idx == round(browser.fps * 0.5)
+
+    # test event window and clip extraction
+    browser = datanavigator.VideoPlotBrowser(video_fpath, signals, event_win=[-0.5, 1.])
+    browser._current_idx = 150
+    assert browser.memoryslots._list["1"] == None
+    browser(simulate_key_press(browser.figure, "1")) # go to 20
+    assert browser.memoryslots._list["1"] == 150
+
+    browser._current_idx = 160
+    assert browser.memoryslots._list["2"] == None
+    browser(simulate_key_press(browser.figure, "2")) # go to 20
+    assert browser.memoryslots._list["2"] == 160
+
+    screengrab_clip = browser.extract_clip()
+    assert os.path.exists(screengrab_clip)

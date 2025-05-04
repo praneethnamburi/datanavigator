@@ -174,7 +174,7 @@ class VideoPlotBrowser(GenericBrowser):
         signals (Dict[str, pysampled.Data]): Dictionary of signals.
         titlefunc (Optional[Callable]): Function to generate the title for the plot.
         figure_handle (Optional[plt.Figure]): Handle to the figure.
-        event_win (Optional[tuple]): Event window.
+        event_win (Optional[tuple]): Event window. Visualize signals around an event. Use this to create "scrolling" plot visualizations, e.g. [-0.5, 1.].
     """
     def __init__(
         self,
@@ -283,15 +283,17 @@ class VideoPlotBrowser(GenericBrowser):
         start_frame: Optional[int] = None,
         end_frame: Optional[int] = None,
         sav_dir: Optional[str] = None,
-        out_rate: int = 30,
-    ) -> None:
+        out_rate: float = None,
+    ) -> str:
         """Save a video of screengrabs.
 
         Args:
-            start_frame (Optional[int]): Starting frame of the clip.
-            end_frame (Optional[int]): Ending frame of the clip.
-            sav_dir (Optional[str]): Directory to save the clip.
-            out_rate (int): Output frame rate.
+            start_frame (Optional[int]): Starting frame of the clip. Defaults to the first memory slot.
+            end_frame (Optional[int]): Ending frame of the clip. Defaults to the second memory slot.
+            sav_dir (Optional[str]): Directory to save the clip. If not provided, a timestamped directory is created.
+
+        Returns:
+            Path to the saved video file.
         """
         import shutil
         import subprocess
@@ -301,20 +303,27 @@ class VideoPlotBrowser(GenericBrowser):
         if end_frame is None:
             end_frame = self.memoryslots._list["2"]
         assert end_frame > start_frame
+        
         if sav_dir is None:
             sav_dir = os.path.join(_config.get_clip_folder(), datetime.now().strftime("%Y%m%d_%H%M%S"))
         if not os.path.exists(sav_dir):
             os.mkdir(sav_dir)
+        
+        if out_rate is None:
+            out_rate = self.fps
+            
         print(f"Saving image sequence to {sav_dir}...")
         for frame_count in range(start_frame, end_frame + 1):
             self._current_idx = frame_count
             self.update()
             self.figure.savefig(os.path.join(sav_dir, f"{frame_count:08d}.png"))
+        
         print("Creating video from image sequence...")
-        cmd = f'cd "{sav_dir}" && ffmpeg -framerate {self.fps} -start_number 0 -i %08d.png -c:v h264_nvenc -b:v 10M -maxrate 12M -bufsize 24M -vf scale="-1:1080" -an "{sav_dir}.mp4"'
+        cmd = f'cd "{sav_dir}" && ffmpeg -framerate {self.fps} -start_number {start_frame} -i %08d.png -c:v h264_nvenc -b:v 10M -maxrate 12M -bufsize 24M -vf scale="-1:1080" -an "{sav_dir}.mp4"'
         subprocess.getoutput(cmd)
 
         print("Removing temporary folder...")
         shutil.rmtree(sav_dir)
 
         print("Done")
+        return f"{sav_dir}.mp4"
