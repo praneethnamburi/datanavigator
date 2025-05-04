@@ -37,6 +37,24 @@ def signal_list():
     ]
 
 
+@pytest.fixture(scope="function", autouse=True)
+def setup_folders(tmp_path):
+    """Ensure clean cache and clip folders for each test."""
+    curr_clip_dir = datanavigator.get_clip_folder()
+    curr_cache_dir = datanavigator.get_cache_folder()
+    clip_dir = tmp_path / "clips"
+    cache_dir = tmp_path / "cache"
+    clip_dir.mkdir()
+    cache_dir.mkdir()
+    datanavigator.set_clip_folder(str(clip_dir))
+    datanavigator.set_cache_folder(str(cache_dir))
+    yield str(clip_dir), str(cache_dir)
+    # Teardown
+    datanavigator.set_clip_folder(curr_clip_dir)
+    datanavigator.set_cache_folder(curr_cache_dir)
+    # Rest of the teardown is handled by tmp_path fixture
+
+
 def simulate_key_press(figure, key="a"):
     """
     Simulate a key press event on the given axis.

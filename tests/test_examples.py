@@ -9,21 +9,6 @@ from .conftest import (
 )
 from datanavigator import examples, _config
 
-# --- Fixtures ---
-
-
-@pytest.fixture(scope="function", autouse=True)
-def setup_folders(tmp_path):
-    """Ensure clean cache and clip folders for each test."""
-    clip_dir = tmp_path / "clips"
-    cache_dir = tmp_path / "cache"
-    clip_dir.mkdir()
-    cache_dir.mkdir()
-    _config.set_clip_folder(str(clip_dir))
-    _config.set_cache_folder(str(cache_dir))
-    yield clip_dir, cache_dir
-    # Teardown is handled by tmp_path fixture
-
 
 @pytest.fixture
 def example_video_path(setup_folders):

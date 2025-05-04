@@ -207,8 +207,8 @@ class GenericBrowser:
             self.increment_frac,
             description="step backward by 1/20 of the timeline",
         )
-        self.add_key_binding("shift+up", self.go_to_start)
-        self.add_key_binding("shift+down", self.go_to_end)
+        self.add_key_binding("shift+up", self.go_to_end)
+        self.add_key_binding("shift+down", self.go_to_start)
         self.add_key_binding("ctrl+c", self.copy_to_clipboard)
         self.add_key_binding(
             "ctrl+k",
