@@ -55,7 +55,7 @@ def setup_folders(tmp_path):
     # Rest of the teardown is handled by tmp_path fixture
 
 
-def simulate_key_press(figure, key="a"):
+def simulate_key_press(figure, key="a", **kwargs):
     """
     Simulate a key press event on the given axis.
 
@@ -70,6 +70,8 @@ def simulate_key_press(figure, key="a"):
         key=key,
         guiEvent=None,
     )
+    for k, v in kwargs.items():
+        setattr(event, k, v)
     return event
 
 
