@@ -8,7 +8,7 @@ from matplotlib.backend_bases import MouseEvent
 import datanavigator
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def matplotlib_figure():
     # used by test_events and test_core
     # Set up: create the figure and axis
@@ -25,6 +25,12 @@ def mock_figure():
     fig = plt.figure()
     yield fig
     plt.close(fig)
+
+
+@pytest.fixture(autouse=True)
+def close_figures():
+    yield
+    plt.close('all')
 
 
 @pytest.fixture

@@ -4,8 +4,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import datanavigator
-from matplotlib.backend_bases import MouseButton
-from matplotlib.backend_bases import MouseEvent
 
 from tests.conftest import simulate_key_press, simulate_mouse_click
 

@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 from unittest.mock import patch, MagicMock
 from datanavigator.components import ComponentBrowser, ClassLabel
-from .conftest import simulate_key_press_at_xy, simulate_mouse_click
+from .conftest import simulate_key_press_at_xy
 
 import matplotlib.pyplot as plt
 

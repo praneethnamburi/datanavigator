@@ -7,7 +7,7 @@ from .conftest import (
     simulate_key_press_at_xy,
     press_browser_button,
 )
-from datanavigator import examples, _config
+from datanavigator import examples
 
 
 @pytest.fixture

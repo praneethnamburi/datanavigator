@@ -1,7 +1,6 @@
 import pytest
 import os
 import numpy as np
-import matplotlib.pyplot as plt
 
 from datanavigator import events
 from datanavigator.events import (
