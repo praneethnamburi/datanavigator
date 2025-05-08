@@ -184,6 +184,20 @@ class GenericBrowser:
             description = on_press_function.__name__
         self.mpl_remove_bindings([key_name])
         self._keypressdict[key_name] = (on_press_function, description)
+    
+    def remove_key_binding(self, key_name: str):
+        """
+        Remove a key binding from the browser.
+
+        Args:
+            key_name (str): Key to remove the binding for.
+        """
+        if key_name in self._keypressdict:
+            del self._keypressdict[key_name]
+            reversed_bindings_dict = {key: mpl_param_name for mpl_param_name, key in self._bindings_removed.items()}
+            if key_name in reversed_bindings_dict:
+                # find the key value pair with the value equal to key_name
+                mpl.rcParams[reversed_bindings_dict[key_name]].append(key_name)
 
     def set_default_keybindings(self):
         """Set default key bindings for navigation."""

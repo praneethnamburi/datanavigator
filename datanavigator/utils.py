@@ -207,7 +207,7 @@ def get_palette(
                 (0.70, 0.70, 0.70),
                 (0.40, 0.76, 0.65),
                 (0.99, 0.55, 0.38),
-            ]
+            ]*np.ceil(n_colors/10)  # Repeat the palette to cover n_colors
         }
         return palettes[palette_name][:n_colors]
 

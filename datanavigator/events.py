@@ -600,9 +600,13 @@ class Event:
         """Get the y-axis limits."""
         if type == "data":
             try:
+                def nanlim(x: np.ndarray, default) -> Tuple[float, float]:
+                    if np.isnan(x).all():
+                        return default
+                    return np.nanmin(x), np.nanmax(x)
                 x = np.asarray(
                     [
-                        (np.nanmin(line.get_ydata()), np.nanmax(line.get_ydata()))
+                        nanlim(line.get_xdata(), line.axes.get_ylim())
                         for line in this_ax.get_lines()
                         if not line.get_label().startswith("event:")
                     ]
