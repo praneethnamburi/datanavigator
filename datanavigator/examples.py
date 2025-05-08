@@ -27,7 +27,7 @@ from .core import Buttons
 from .signals import SignalBrowser
 
 
-def get_example_video(dest_folder: str=None, source_url: str=None) -> str:
+def get_example_video(dest_folder: str = None, source_url: str = None) -> str:
     """
     Download a sample video file if it doesn't exist locally and return its path.
 
@@ -52,7 +52,7 @@ def get_example_video(dest_folder: str=None, source_url: str=None) -> str:
         dest_folder = _config.get_clip_folder()
     else:
         assert os.path.exists(dest_folder), f"Folder {dest_folder} does not exist."
-    
+
     example_video_path = os.path.join(dest_folder, "example_video.mp4")
     if os.path.exists(example_video_path):
         return example_video_path
@@ -60,7 +60,9 @@ def get_example_video(dest_folder: str=None, source_url: str=None) -> str:
     if source_url is None:
         source_url = "https://test-videos.co.uk/vids/jellyfish/mp4/h264/720/Jellyfish_720_10s_2MB.mp4"
 
-    headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
+    }
     req = urllib.request.Request(source_url, headers=headers)
 
     with urllib.request.urlopen(req) as response:
@@ -215,7 +217,7 @@ class SelectorDemo:
         Creates a figure with axes, adds control buttons, plots random data,
         and activates the lasso selector. Sets a random seed for reproducible data.
         """
-        np.random.seed(42) # Set random seed for reproducibility
+        np.random.seed(42)  # Set random seed for reproducibility
         f, ax = plt.subplots(1, 1)
         self.buttons = Buttons(parent=f)
         self.buttons.add(text="Start selection", type_="Push", action_func=self.start)

@@ -33,7 +33,7 @@ class ComponentBrowser(GenericBrowser):
 
         Args:
             data (np.ndarray): 2D array with number of signals on dim1, and number of time points on dim2.
-            data_transform (np.ndarray): Transformed data, still a 2D array with number of signals x number of components. 
+            data_transform (np.ndarray): Transformed data, still a 2D array with number of signals x number of components.
                 For example, transformed using one of (sklearn.decomposition.PCA, umap.UMAP, sklearn.manifold.TSNE, sklearn.decomposition.FastICA)
             labels (Optional[np.ndarray]): n_signals x 1 array with each entry representing the class of each signal piece.
             figure_handle (Optional[plt.Figure]): Matplotlib figure handle.
@@ -57,19 +57,24 @@ class ComponentBrowser(GenericBrowser):
             assert len(labels) == self.n_signals
             self.labels = labels
         # make sure all class labels are zero or positive!
-        assert np.min(self.labels) >= 0 
+        assert np.min(self.labels) >= 0
 
         class_labels = list(np.unique(self.labels))
-        
+
         # for detecting keypresses
         self.class_labels_str = [str(x) for x in class_labels]
         self.n_classes = len(class_labels)
         if class_names is None:
-            self.class_names = {class_label: f"Class_{class_label}" for class_label in class_labels}
+            self.class_names = {
+                class_label: f"Class_{class_label}" for class_label in class_labels
+            }
         else:
             assert set(class_names.keys()) == set(class_labels)
             self.class_names = class_names
-        self.classes = [ClassLabel(label=label, name=self.class_names[label]) for label in self.labels]
+        self.classes = [
+            ClassLabel(label=label, name=self.class_names[label])
+            for label in self.labels
+        ]
 
         if desired_class_names is None:
             desired_class_names = self.class_names
@@ -81,7 +86,11 @@ class ComponentBrowser(GenericBrowser):
         self.annotation_idx_str = [str(x) for x in self.annotation_names]
 
         self.cid.append(self.figure.canvas.mpl_connect("pick_event", self.onpick))
-        self.cid.append(self.figure.canvas.mpl_connect("button_press_event", self.select_signal_piece_dblclick))
+        self.cid.append(
+            self.figure.canvas.mpl_connect(
+                "button_press_event", self.select_signal_piece_dblclick
+            )
+        )
 
         n_scatter_plots = int(n_components * (n_components - 1) / 2)
         self.gs = GridSpec(3, max(n_scatter_plots, 4))
@@ -111,14 +120,20 @@ class ComponentBrowser(GenericBrowser):
         this_ax = self.figure.add_subplot(self.gs[2, 0])
         self.plot_handles["ax_signal_plots"] = this_ax
         for signal_count in range(self.n_signals):
-            self.plot_handles["signal_plots"].append(this_ax.plot(self.data[signal_count, :])[0])
+            self.plot_handles["signal_plots"].append(
+                this_ax.plot(self.data[signal_count, :])[0]
+            )
 
         self.plot_handles["ax_current_signal"] = self.figure.add_subplot(self.gs[2, 1])
-        (self.plot_handles["current_signal"],) = self.plot_handles["ax_current_signal"].plot(
-            list(range(self.n_timepts)), [np.nan] * self.n_timepts
+        (self.plot_handles["current_signal"],) = self.plot_handles[
+            "ax_current_signal"
+        ].plot(list(range(self.n_timepts)), [np.nan] * self.n_timepts)
+        self.plot_handles["ax_current_signal"].set_xlim(
+            self.plot_handles["ax_signal_plots"].get_xlim()
         )
-        self.plot_handles["ax_current_signal"].set_xlim(self.plot_handles["ax_signal_plots"].get_xlim())
-        self.plot_handles["ax_current_signal"].set_ylim(self.plot_handles["ax_signal_plots"].get_ylim())
+        self.plot_handles["ax_current_signal"].set_ylim(
+            self.plot_handles["ax_signal_plots"].get_ylim()
+        )
 
         self.plot_handles["ax_history_signal"] = self.figure.add_subplot(self.gs[2, 2])
 
@@ -130,11 +145,15 @@ class ComponentBrowser(GenericBrowser):
                 idx + time_index, sig, color=self.colors[idx]
             )  # assumes that there is only one line drawn per signal
             self.plot_handles["signal_full"].append(this_plot_handle)
-        self.plot_handles["signal_selected_piece"], = self.plot_handles["ax_signal_full"].plot([], [], color="gray", linewidth=2)
+        (self.plot_handles["signal_selected_piece"],) = self.plot_handles[
+            "ax_signal_full"
+        ].plot([], [], color="gray", linewidth=2)
 
         this_ylim = self.plot_handles["ax_signal_full"].get_ylim()
         for x_pos in np.r_[: self.n_signals + 1]:  # separators between signals
-            self.plot_handles["ax_signal_full"].plot([x_pos] * 2, this_ylim, "k", linewidth=0.2)
+            self.plot_handles["ax_signal_full"].plot(
+                [x_pos] * 2, this_ylim, "k", linewidth=0.2
+            )
         self.memoryslots.disable()
 
         self._class_info_text = utils.TextView([], self.figure, pos="bottom left")
@@ -146,14 +165,19 @@ class ComponentBrowser(GenericBrowser):
         self.add_key_binding("m", self.toggle_mode)
 
         self._annotation_text = utils.TextView(
-            ["", "Annotation list:"] + [f"{k}:{v}" for k, v in self.annotation_names.items()],
+            ["", "Annotation list:"]
+            + [f"{k}:{v}" for k, v in self.annotation_names.items()],
             self.figure,
             pos="top left",
         )
 
-        self._message = utils.TextView(["Last action : "], self.figure, pos="bottom right")
+        self._message = utils.TextView(
+            ["Last action : "], self.figure, pos="bottom right"
+        )
 
-        self._desired_class_info_text = utils.TextView([], self.figure, pos="bottom center")
+        self._desired_class_info_text = utils.TextView(
+            [], self.figure, pos="bottom center"
+        )
         self.update_desired_class_info_text()
 
         self.add_key_binding("r", self.clear_axes)
@@ -206,7 +230,9 @@ class ComponentBrowser(GenericBrowser):
         for handle_name, handle in self.plot_handles.items():
             if "scatter_plot_" in handle_name:
                 this_data = np.squeeze(handle._offsets[self._data_index].data)
-                self.plot_handles[handle_name.replace("_plot_", "_highlight_")].set_data(this_data[0], this_data[1])
+                self.plot_handles[
+                    handle_name.replace("_plot_", "_highlight_")
+                ].set_data(this_data[0], this_data[1])
         self.plot_handles["ax_history_signal"].plot(self.data[self._data_index, :])
         self.plot_handles["current_signal"].set_ydata(self.data[self._data_index, :])
         self.plot_handles["signal_selected_piece"].set_data(
@@ -235,7 +261,8 @@ class ComponentBrowser(GenericBrowser):
             draw (bool): Whether to draw the plot after updating.
         """
         self._desired_class_info_text.update(
-            ["Desired class list:"] + [f"{k}:{v}" for k, v in self.desired_class_names.items()]
+            ["Desired class list:"]
+            + [f"{k}:{v}" for k, v in self.desired_class_names.items()]
         )
         if draw:
             plt.draw()
@@ -267,10 +294,14 @@ class ComponentBrowser(GenericBrowser):
         Args:
             event (Optional[Any]): The key event.
         """
-        self._mode = {"correction": "annotation", "annotation": "correction"}[self._mode]
+        self._mode = {"correction": "annotation", "annotation": "correction"}[
+            self._mode
+        ]
         self.update_mode_text()
 
-    def update_colors(self, data_idx: Optional[List[int]] = None, draw: bool = True) -> None:
+    def update_colors(
+        self, data_idx: Optional[List[int]] = None, draw: bool = True
+    ) -> None:
         """Update the colors of the plot.
 
         Args:
@@ -352,20 +383,30 @@ class ComponentBrowser(GenericBrowser):
         Returns:
             Dict[int, Dict[str, Union[int, str, List[str]]]]: Dictionary of class labels.
         """
-        fields_to_save = ("label", "name", "assignment_type", "annotations", "original_label")
+        fields_to_save = (
+            "label",
+            "name",
+            "assignment_type",
+            "annotations",
+            "original_label",
+        )
         ret = {}
         for class_idx, class_label in enumerate(self.classes):
             ret[class_idx] = {fld: getattr(class_label, fld) for fld in fields_to_save}
         return ret
 
-    def set_classlabels(self, classlabels_dict: Dict[int, Dict[str, Union[int, str, List[str]]]]) -> None:
+    def set_classlabels(
+        self, classlabels_dict: Dict[int, Dict[str, Union[int, str, List[str]]]]
+    ) -> None:
         """Set class labels from a dictionary.
 
         Args:
             classlabels_dict (Dict[int, Dict[str, Union[int, str, List[str]]]]): Dictionary of class labels.
         """
         assert set(classlabels_dict.keys()) == set(range(self.n_signals))
-        self.classes = [ClassLabel(**this_label) for this_label in classlabels_dict.values()]
+        self.classes = [
+            ClassLabel(**this_label) for this_label in classlabels_dict.values()
+        ]
 
 
 class ClassLabel:

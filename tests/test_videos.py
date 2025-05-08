@@ -91,17 +91,17 @@ def test_video_browser_extract_clip(video_fpath):
     os.remove(ret_name)
 
     browser._current_idx = 40
-    browser(simulate_key_press(browser.figure, "1")) # go to 20
+    browser(simulate_key_press(browser.figure, "1"))  # go to 20
     assert browser.memoryslots._list["1"] == 20
-    browser(simulate_key_press(browser.figure, "1")) # clear 20 from memory slot 1
+    browser(simulate_key_press(browser.figure, "1"))  # clear 20 from memory slot 1
     assert browser.memoryslots._list["1"] is None
     browser._current_idx = 40
     browser(simulate_key_press(browser.figure, "1"))
     assert browser.memoryslots._list["1"] == 40
 
-    browser(simulate_key_press(browser.figure, "2")) # go to 75
+    browser(simulate_key_press(browser.figure, "2"))  # go to 75
     assert browser.memoryslots._list["2"] == 75
-    browser(simulate_key_press(browser.figure, "2")) # clear 75 from memory slot 2
+    browser(simulate_key_press(browser.figure, "2"))  # clear 75 from memory slot 2
     assert browser.memoryslots._list["2"] is None
     browser._current_idx = 92
     browser(simulate_key_press(browser.figure, "2"))
@@ -137,24 +137,26 @@ def test_video_plot_browser_init(video_fpath, signal_list):
     assert browser._current_idx == 0
     event = simulate_mouse_click(
         (browser.figure, browser.plot_handles["signal_ax"][0]),
-        xdata=0.5, 
+        xdata=0.5,
         ydata=0.5,
         button=3,
-        )
+    )
     browser.figure.canvas.callbacks.process("button_press_event", event)
-    
+
     assert browser._current_idx == round(browser.fps * 0.5)
 
     # test event window and clip extraction
-    browser = datanavigator.VideoPlotBrowser(video_fpath, signals, event_win=[-0.5, 1.])
+    browser = datanavigator.VideoPlotBrowser(
+        video_fpath, signals, event_win=[-0.5, 1.0]
+    )
     browser._current_idx = 150
     assert browser.memoryslots._list["1"] == None
-    browser(simulate_key_press(browser.figure, "1")) # go to 20
+    browser(simulate_key_press(browser.figure, "1"))  # go to 20
     assert browser.memoryslots._list["1"] == 150
 
     browser._current_idx = 160
     assert browser.memoryslots._list["2"] == None
-    browser(simulate_key_press(browser.figure, "2")) # go to 20
+    browser(simulate_key_press(browser.figure, "2"))  # go to 20
     assert browser.memoryslots._list["2"] == 160
 
     screengrab_clip = browser.extract_clip()

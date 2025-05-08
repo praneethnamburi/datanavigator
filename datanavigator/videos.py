@@ -58,7 +58,9 @@ class VideoBrowser(GenericBrowser):
 
         if not os.path.exists(vid_name):
             # try looking in the CLIP FOLDER
-            vid_name = os.path.join(_config.get_clip_folder(), os.path.split(vid_name)[-1])
+            vid_name = os.path.join(
+                _config.get_clip_folder(), os.path.split(vid_name)[-1]
+            )
         assert os.path.exists(vid_name)
         self.fname = vid_name
         self.name = os.path.splitext(os.path.split(vid_name)[1])[0]
@@ -95,7 +97,9 @@ class VideoBrowser(GenericBrowser):
         Args:
             n_steps (int): Number of steps to increment.
         """
-        self._current_idx = min(self._current_idx + int(len(self) / n_steps), len(self) - 1)
+        self._current_idx = min(
+            self._current_idx + int(len(self) / n_steps), len(self) - 1
+        )
         self.update()
 
     def decrement_frac(self, n_steps: int = 100) -> None:
@@ -109,7 +113,9 @@ class VideoBrowser(GenericBrowser):
 
     def update(self) -> None:
         """Update the video frame."""
-        self._im.set_data(self.image_process_func(self.data[self._current_idx].asnumpy()))
+        self._im.set_data(
+            self.image_process_func(self.data[self._current_idx].asnumpy())
+        )
         self._ax.set_title(self.titlefunc(self))
         super().update()
         plt.draw()
@@ -134,9 +140,11 @@ class VideoBrowser(GenericBrowser):
         """
         try:
             import ffmpeg
+
             use_subprocess = False
         except ModuleNotFoundError:
             import subprocess
+
             use_subprocess = True
 
         if start_frame is None:
@@ -152,7 +160,8 @@ class VideoBrowser(GenericBrowser):
         if fname_out is None:
             fname_out = os.path.join(
                 _config.get_clip_folder(),
-                os.path.splitext(self.name)[0] + "_s{:.3f}_e{:.3f}.mp4".format(start_time, end_time),
+                os.path.splitext(self.name)[0]
+                + "_s{:.3f}_e{:.3f}.mp4".format(start_time, end_time),
             )
         if use_subprocess:
             subprocess.getoutput(
@@ -176,6 +185,7 @@ class VideoPlotBrowser(GenericBrowser):
         figure_handle (Optional[plt.Figure]): Handle to the figure.
         event_win (Optional[tuple]): Event window. Visualize signals around an event. Use this to create "scrolling" plot visualizations, e.g. [-0.5, 1.].
     """
+
     def __init__(
         self,
         vid_name: str,
@@ -231,9 +241,13 @@ class VideoPlotBrowser(GenericBrowser):
         plot_handles = {}
         for signal_count, (signal_name, this_signal) in enumerate(self.signals.items()):
             this_ax = fig.add_subplot(gs[signal_count, 1])
-            plot_handles[f"signal{signal_count}"] = this_ax.plot(this_signal.t, this_signal())
+            plot_handles[f"signal{signal_count}"] = this_ax.plot(
+                this_signal.t, this_signal()
+            )
             ylim = this_ax.get_ylim()
-            (plot_handles[f"signal{signal_count}_tick"],) = this_ax.plot([0, 0], ylim, "k")
+            (plot_handles[f"signal{signal_count}_tick"],) = this_ax.plot(
+                [0, 0], ylim, "k"
+            )
             this_ax.set_title(signal_name)
             if signal_count < len(self.signals) - 1:
                 this_ax.get_xaxis().set_ticks([])
@@ -252,13 +266,19 @@ class VideoPlotBrowser(GenericBrowser):
 
     def update(self) -> None:
         """Update the video frame and signals."""
-        self.plot_handles["montage"].set_data(self.video_data[self._current_idx].asnumpy())
+        self.plot_handles["montage"].set_data(
+            self.video_data[self._current_idx].asnumpy()
+        )
         self.plot_handles["ax"]["montage"].set_title(self.titlefunc(self))
         for signal_count, this_signal in enumerate(self.signals.items()):
-            self.plot_handles[f"signal{signal_count}_tick"].set_xdata([self._current_idx / self.fps] * 2)
+            self.plot_handles[f"signal{signal_count}_tick"].set_xdata(
+                [self._current_idx / self.fps] * 2
+            )
         if self.event_win is not None:
             curr_t = self._current_idx / self.fps
-            self.plot_handles["signal_ax"][0].set_xlim(curr_t + self.event_win[0], curr_t + self.event_win[1])
+            self.plot_handles["signal_ax"][0].set_xlim(
+                curr_t + self.event_win[0], curr_t + self.event_win[1]
+            )
         super().update()
         plt.draw()
 
@@ -303,21 +323,23 @@ class VideoPlotBrowser(GenericBrowser):
         if end_frame is None:
             end_frame = self.memoryslots._list["2"]
         assert end_frame > start_frame
-        
+
         if sav_dir is None:
-            sav_dir = os.path.join(_config.get_clip_folder(), datetime.now().strftime("%Y%m%d_%H%M%S"))
+            sav_dir = os.path.join(
+                _config.get_clip_folder(), datetime.now().strftime("%Y%m%d_%H%M%S")
+            )
         if not os.path.exists(sav_dir):
             os.mkdir(sav_dir)
-        
+
         if out_rate is None:
             out_rate = self.fps
-            
+
         print(f"Saving image sequence to {sav_dir}...")
         for frame_count in range(start_frame, end_frame + 1):
             self._current_idx = frame_count
             self.update()
             self.figure.savefig(os.path.join(sav_dir, f"{frame_count:08d}.png"))
-        
+
         print("Creating video from image sequence...")
         cmd = f'cd "{sav_dir}" && ffmpeg -framerate {self.fps} -start_number {start_frame} -i %08d.png -c:v h264_nvenc -b:v 10M -maxrate 12M -bufsize 24M -vf scale="-1:1080" -an "{sav_dir}.mp4"'
         subprocess.getoutput(cmd)

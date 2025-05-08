@@ -87,12 +87,14 @@ class EventData:
 
         def _1d_to_2d(x: List) -> List:
             v = np.asarray(x)
-            if v.ndim == 1:  # passing in a list events of size 1, e.g., [1, 2, 3, 4]. Turn it into [[1], [2], [3], [4]]
+            if (
+                v.ndim == 1
+            ):  # passing in a list events of size 1, e.g., [1, 2, 3, 4]. Turn it into [[1], [2], [3], [4]]
                 v = v[:, np.newaxis]
                 return [list(vi) for vi in v]
             return x
 
-        self.default =_1d_to_2d( _to_list(default))
+        self.default = _1d_to_2d(_to_list(default))
         self.added = _1d_to_2d(_to_list(added))
         self.removed = _1d_to_2d(_to_list(removed))
         self.tags = _to_list(tags)
@@ -100,7 +102,10 @@ class EventData:
         self.params = params if params is not None else {}
 
         # assert uniform size of events, 0 when there are no events
-        assert len(set([len(x) for x in self.get_times()])) in (0, 1), "All events must have the same size."
+        assert len(set([len(x) for x in self.get_times()])) in (
+            0,
+            1,
+        ), "All events must have the same size."
 
     def asdict(self) -> Dict:
         """Convert the event data to a dictionary."""
@@ -116,7 +121,7 @@ class EventData:
     def __len__(self) -> int:
         """Return the number of events."""
         return len(self.get_times())
-    
+
     def get_size(self) -> int:
         """Return the size of the envent, for example, 2 for start and stop events."""
         size_set = set([len(x) for x in self.get_times()])
@@ -135,7 +140,7 @@ class EventData:
         return functools.reduce(
             lambda a, b: a | b,
             [portion.closed(*interval_limits) for interval_limits in self.get_times()],
-            portion.empty()
+            portion.empty(),
         )
 
     def __and__(self, other: EventData) -> EventData:
@@ -143,17 +148,19 @@ class EventData:
         try:
             x = self.to_portions() & other.to_portions()
         except TypeError:
-            raise TypeError("Intersection is only implemented for size-2 events (start and stop times).")
-        return EventData(default=[[xi.lower, xi.upper] for xi in x if xi.upper != xi.lower]) # only return non-zero duration events
+            raise TypeError(
+                "Intersection is only implemented for size-2 events (start and stop times)."
+            )
+        return EventData(
+            default=[[xi.lower, xi.upper] for xi in x if xi.upper != xi.lower]
+        )  # only return non-zero duration events
 
     def __contains__(self, item: Any) -> bool:
         """Check if an item is in the event data."""
         return item in self.to_portions()
 
     @staticmethod
-    def _process_inp(
-        other: Union["portion.Interval", Tuple]
-    ) -> portion.Interval:
+    def _process_inp(other: Union["portion.Interval", Tuple]) -> portion.Interval:
         """Process the input to ensure it is an interval."""
         if other.__class__.__name__ == EventData.__name__:
             return other.to_portions()
@@ -326,7 +333,7 @@ class Event:
         # If the file path does not exists or is not creatable, then return the data that was passed in without saving it
         if not utils.is_path_exists_or_creatable(str(fname)):
             return ret
-        
+
         # Save the file if it does not exist or if the mandate is to overwrite the file
         if (not os.path.exists(fname)) or overwrite:
             ret.save()
@@ -336,14 +343,14 @@ class Event:
         assert os.path.exists(fname) and (not overwrite)
         ret_existing = cls.from_file(fname, **kwargs)
         new_keys = set(ret._data.keys()) - set(ret_existing._data.keys())
-        
+
         # If there is new data, then add it to the event file
         # Whether there are new keys or not, the data in the existing saved file supercedes the data that was passed in
         print(f"Appending new data to the event file {fname}:")
         print(new_keys)
         ret_existing._data = {**ret._data, **ret_existing._data}
         ret_existing.save()
-        
+
         return ret_existing
 
     def all_keys_are_tuples(self) -> bool:
@@ -476,11 +483,13 @@ class Event:
             self._data[data_id] = EventData()
         if self.pick_action == "append":
             self._data[data_id].added.append(sequence)
-        else: # overwrite
+        else:  # overwrite
             if len(self._data[data_id].default) not in (0, 1):
                 # reset the buffer
                 self._buffer = []
-                raise AssertionError("Overwrite mode can only be used when there is at most one default event.")
+                raise AssertionError(
+                    "Overwrite mode can only be used when there is at most one default event."
+                )
             if len(self._data[data_id].default) == 1:
                 # remove the event in default and add the new one to added
                 self._data[data_id].removed.append(self._data[data_id].default[0])
@@ -541,7 +550,7 @@ class Event:
                 sequence = ev.default.pop(idx_def)
                 ev.removed.append(sequence)
                 _removed = True
-        else: # both are empty
+        else:  # both are empty
             return
 
         assert sequence is not None
@@ -572,7 +581,7 @@ class Event:
 
     def _setup_display_line(self) -> None:
         """Setup line display for the event."""
-        plot_kwargs = {**{"label": f"event:{self.name}"}, ** self.plot_kwargs}
+        plot_kwargs = {**{"label": f"event:{self.name}"}, **self.plot_kwargs}
         plot_kwargs.pop("display_type", None)
         for ax in self.ax_list:
             (this_plot,) = ax.plot([], [], color=self.color, **plot_kwargs)
@@ -608,7 +617,9 @@ class Event:
         for ax, plot_handle in zip(self.ax_list, self.plot_handles):
             yl = self._get_ylim(ax)
             plot_handle.set_data(
-                *utils.ticks_from_times(list(np.asarray(self.get_current_event_times()).flatten()), yl)
+                *utils.ticks_from_times(
+                    list(np.asarray(self.get_current_event_times()).flatten()), yl
+                )
             )
         if draw:
             plt.draw()
@@ -658,13 +669,16 @@ class Event:
     def to_portions(self) -> Dict:
         """Convert the event data to portions."""
         assert self.size == 2
-        return {signal_id: event_data.to_portions() for signal_id, event_data in self._data.items()}
+        return {
+            signal_id: event_data.to_portions()
+            for signal_id, event_data in self._data.items()
+        }
         ret = {}
         for signal_id, signal_events in self.to_dict().items():
             ret[signal_id] = functools.reduce(
                 lambda a, b: a | b,
                 [portion.closed(*interval_limits) for interval_limits in signal_events],
-                portion.empty()
+                portion.empty(),
             )
         return ret
 
@@ -812,8 +826,7 @@ def _find_nearest_idx_val(array: List[float], value: float) -> Tuple[int, float]
 
     Returns:
         Tuple[int, float]: Index and value of the nearest element.
-    """    
-    """"""
+    """
     array = np.asarray(array)
     idx = (np.abs(array - value)).argmin()
     val = array[idx]

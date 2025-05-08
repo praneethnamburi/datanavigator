@@ -172,7 +172,7 @@ class AssetContainer:
             assert asset.name not in self.names
         self._list.append(asset)
         return asset
-    
+
     def __contains__(self, item: str) -> bool:
         """Check if an asset with the given name exists in the container."""
         return item in self.names

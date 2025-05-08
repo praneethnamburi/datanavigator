@@ -169,7 +169,9 @@ class GenericBrowser:
                 ax.autoscale(axis=axis)
         plt.draw()
 
-    def add_key_binding(self, key_name: str, on_press_function: callable, description: str = None):
+    def add_key_binding(
+        self, key_name: str, on_press_function: callable, description: str = None
+    ):
         """
         Add key bindings to the browser.
 
@@ -314,7 +316,9 @@ class GenericBrowser:
         self._keybindingtext = utils.TextView(text, f, pos=pos)
 
     @staticmethod
-    def _filter_sibling_axes(ax: list[maxes.Axes], share: str = "x", get_bool: bool = False):
+    def _filter_sibling_axes(
+        ax: list[maxes.Axes], share: str = "x", get_bool: bool = False
+    ):
         """
         Given a list of matplotlib axes, it will return axes to manipulate by picking one from a set of siblings.
 
@@ -333,10 +337,12 @@ class GenericBrowser:
         if not ax:  # no subplots in figure
             return
         pan_ax = [True] * len(ax)
-        get_siblings = {"x": ax[0].get_shared_x_axes, "y": ax[0].get_shared_y_axes}[share]().get_siblings
+        get_siblings = {"x": ax[0].get_shared_x_axes, "y": ax[0].get_shared_y_axes}[
+            share
+        ]().get_siblings
         for i, ax_row in enumerate(ax):
             sib = get_siblings(ax_row)
-            for j, ax_col in enumerate(ax[i + 1:]):
+            for j, ax_col in enumerate(ax[i + 1 :]):
                 if ax_col in sib:
                     pan_ax[j + i + 1] = False
 

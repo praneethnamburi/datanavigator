@@ -13,17 +13,18 @@ from typing import Callable, Optional
 
 from .core import GenericBrowser
 
+
 class SignalBrowser(GenericBrowser):
     """
     Browse an array of pysampled.Data elements, or 2D arrays.
     """
 
     def __init__(
-        self, 
-        plot_data: list[pysampled.Data], 
-        titlefunc: Optional[Callable] = None, 
-        figure_handle: Optional[plt.Figure] = None, 
-        reset_on_change: bool = False
+        self,
+        plot_data: list[pysampled.Data],
+        titlefunc: Optional[Callable] = None,
+        figure_handle: Optional[plt.Figure] = None,
+        reset_on_change: bool = False,
     ) -> None:
         """
         Initialize the SignalBrowser.
@@ -41,11 +42,13 @@ class SignalBrowser(GenericBrowser):
         if isinstance(this_data, pysampled.Data):
             self._plot = self._ax.plot(this_data.t, this_data())
         else:
-            self._plot, = self._ax.plot(this_data)
+            (self._plot,) = self._ax.plot(this_data)
 
         self.data = plot_data
         if titlefunc is None:
-            self.titlefunc = lambda s: getattr(s.data[s._current_idx], "name", f"Plot number {s._current_idx}")
+            self.titlefunc = lambda s: getattr(
+                s.data[s._current_idx], "name", f"Plot number {s._current_idx}"
+            )
         else:
             self.titlefunc = titlefunc
 
@@ -76,6 +79,8 @@ class SignalBrowser(GenericBrowser):
         else:
             self._plot.set_ydata(this_data)
         self._ax.set_title(self.titlefunc(self))
-        if "Auto limits" in self.buttons and self.buttons["Auto limits"].state: # is True
+        if (
+            "Auto limits" in self.buttons and self.buttons["Auto limits"].state
+        ):  # is True
             self.reset_axes()
         plt.draw()
