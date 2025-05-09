@@ -351,9 +351,11 @@ class StateVariables(AssetContainer):
             f"{x.name} - {x.current_state}" for x in self._list
         ]
 
-    def show(self, pos: str = "bottom right") -> None:
+    def show(self, pos: str = "bottom right", fax=None) -> None:
         """Show state variables text."""
-        self._text = TextView(self._get_display_text(), fax=self.parent.figure, pos=pos)
+        if fax is None:
+            fax = self.parent.figure
+        self._text = TextView(self._get_display_text(), fax=fax, pos=pos)
 
     def update_display(self, draw: bool = True) -> None:
         """Update the display of state variables."""
