@@ -1,6 +1,10 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
+## [1.1.2]
+Minor bugfix. Fixed error in the palette code when seaborn is not installed
+Minor feature add. Export h5 files as json.
+
 ## [1.1.1]
 Minor bugfix related to adding annotation layers after creating the VideoPointAnnotator interface.
 
