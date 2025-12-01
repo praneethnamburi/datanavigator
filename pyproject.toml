@@ -8,16 +8,18 @@ authors = [{name = "Praneeth Namburi", email = "praneeth.namburi@gmail.com"}]
 readme = "README.md"
 requires-python = ">=3.7"
 dynamic = ["version", "description"]
+keywords = ["data", "visualization", "analysis", "time series", "video", "images", "scientific"]
 dependencies = [
     "numpy<2",
     "pandas",
     "matplotlib",
-    "opencv-contrib-python",
+    "opencv-python",
     "portion",
     "ffmpeg-python",
     "pysampled",
     "decord",
-    "tables"
+    "tables",
+    "tqdm",
 ]
 license = {file = "LICENSE"}
 classifiers = [
@@ -37,3 +39,6 @@ classifiers = [
 
 [project.urls]
 Home = "https://github.com/praneethnamburi/datanavigator"
+Repository = "https://github.com/praneethnamburi/datanavigator"
+Issues = "https://github.com/praneethnamburi/datanavigator/issues"
+Documentation = "https://datanavigator.readthedocs.io/"
