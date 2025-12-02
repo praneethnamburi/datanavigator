@@ -15,12 +15,10 @@
 pip install datanavigator
 ```
 
-If you encounter dependency issues, use the `requirements.yml` file with conda to either create a new environment or update your existing environment. Then, run the command above to install `datanavigator`.
+If you encounter dependency issues and are using `conda`, set up your environment with `conda` using the `requirements.yml` file in this repository.
 
 ```sh
-git clone https://github.com/praneethnamburi/datanavigator.git
-cd datanavigator
-conda env create -n env-datanavigator -f requirements.yml
+conda env create -n env-datanavigator -f https://github.com/praneethnamburi/datanavigator/raw/master/requirements.yml
 conda activate env-datanavigator
 pip install datanavigator
 ```

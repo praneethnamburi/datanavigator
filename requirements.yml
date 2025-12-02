@@ -5,14 +5,14 @@ channels:
 dependencies:
   - python>=3.7
   - pip
-  - numpy
+  - numpy<2
   - pandas
   - matplotlib
-  - opencv
   - portion
   - ffmpeg-python
+  - pytables
+  - tqdm
   - pip:
-    - opencv-contrib-python
+    - opencv-python
     - pysampled
     - decord
-    - tables
