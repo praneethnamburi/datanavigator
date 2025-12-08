@@ -1,6 +1,9 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
+## [1.1.4]
+Adding support to export video annotations as pysampled.Data with signal_names and signal_coords.
+
 ## [1.1.3]
 Minor bugfixes. 
 1. Restrict numpy version to less than 2 in pyproject.toml.
