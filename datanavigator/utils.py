@@ -41,6 +41,66 @@ def ticks_from_times(
     return nan_pad_x(times), nan_pad_y(tick_lim, len(times))
 
 
+def find_nearest(x, y):
+    """Find the nearest x-values for every value in y.
+
+    Args:
+        x: Iterable of candidate values.
+        y: Iterable of query values.
+
+    Returns:
+        List with the same length as y, where each element is the value in x
+        closest to the corresponding element of y.
+    """
+    x = np.asarray(x)
+    y = np.asarray(y)
+    return [x[np.argmin(np.abs(x - yi))] for yi in y]
+
+
+def find_nearest_idx_val(array, value):
+    """Index and value of the element in ``array`` closest to ``value``.
+
+    Args:
+        array: Iterable of candidate values.
+        value: Query value.
+
+    Returns:
+        Tuple ``(idx, val)`` where ``idx`` is the index of the nearest entry
+        in ``array`` and ``val`` is that entry.
+    """
+    array = np.asarray(array)
+    idx = (np.abs(array - value)).argmin()
+    return idx, array[idx]
+
+
+def find_nearest_idx(array, value):
+    """Index of the element in ``array`` closest to ``value``.
+
+    Args:
+        array: Iterable of candidate values.
+        value: Query value.
+
+    Returns:
+        Integer index of the nearest entry in ``array``.
+    """
+    array = np.asarray(array)
+    return (np.abs(array - value)).argmin()
+
+
+def find_nearest_val(array, value):
+    """Value in ``array`` closest to ``value``.
+
+    Args:
+        array: Iterable of candidate values.
+        value: Query value.
+
+    Returns:
+        The entry of ``array`` closest to ``value``.
+    """
+    array = np.asarray(array)
+    return array[find_nearest_idx(array, value)]
+
+
 class _List(list):
     """Extended list with additional methods to find next and previous elements."""
 
