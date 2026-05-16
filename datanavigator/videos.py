@@ -18,6 +18,7 @@ from typing import Callable, Dict, Optional, Union
 import pysampled
 from decord import VideoReader
 from matplotlib import pyplot as plt
+from matplotlib.backend_bases import MouseButton
 from matplotlib.gridspec import GridSpec
 
 from . import _config
@@ -321,7 +322,7 @@ class VideoPlotBrowser(GenericBrowser):
         if (
             isinstance(this_frame, (int, float))
             and (0 <= this_frame < self._len)
-            and (str(event.button) == "MouseButton.RIGHT")
+            and (event.button == MouseButton.RIGHT)
         ):
             self._current_idx = this_frame
             self.update()

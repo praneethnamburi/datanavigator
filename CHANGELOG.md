@@ -77,6 +77,16 @@ Audit-and-polish release. No public API changes.
   This was a latent bug surfaced by the 1.2.0 audit's fresh-env
   test run (matplotlib 3.10.9). `test_video_plot_browser_init`
   passes again.
+- `VideoPlotBrowser.onclick` right-click-to-seek now works on
+  Python ≥ 3.11. The check compared `str(event.button)` to the
+  literal `"MouseButton.RIGHT"`, which silently broke when
+  Python 3.11 changed `IntEnum.__str__` to return the integer
+  value — `str(MouseButton.RIGHT)` is now `"3"`. Replaced with an
+  enum comparison (`event.button == MouseButton.RIGHT`). The
+  failure had been mis-triaged in the 1.2.0 audit as a headless-
+  Agg dispatch quirk; it was a runtime defect for every user on
+  Python ≥ 3.11, not test-only. Confirmed by running
+  `test_video_plot_browser_init` on Python 3.12 + matplotlib 3.10.7.
 - `VideoAnnotation.to_dlc` no longer uses pandas chained assignment
   (`df.loc[row][col] = val`), which pandas emits a `FutureWarning`
   on every call and which will silently no-op once Copy-on-Write

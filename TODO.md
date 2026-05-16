@@ -35,13 +35,6 @@ authoritative roadmap lives in
 - `components.py` — simplify the verbose palette idiom
   `plt.get_cmap("tab20")([np.r_[0:1.5:0.05]])[0][:, :3]` to
   `plt.cm.tab20(np.linspace(0, 1, 20))[:, :3]`.
-- `tests/test_videos.py::test_video_plot_browser_init` — the mouse-
-  click event handler that should jump `_current_idx` doesn't fire
-  under Python 3.12 + matplotlib on Windows CI (same test passes on
-  Python 3.10 locally). Likely a `MouseEvent` dispatch difference
-  under the headless Agg backend on 3.12; needs investigation
-  against a Python 3.12 + matplotlib≥3.10 local env. Marked
-  continue-on-error on the Windows runner for 1.2.0.
 - `pointtracking.py:861-887` — `rstc_paths` dict in
   `check_labels_with_lk` is populated by slice-assignment but never
   returned. Dead-but-populated state; safe removal requires deleting
