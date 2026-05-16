@@ -6,9 +6,21 @@ build-backend = "flit_core.buildapi"
 name = "datanavigator"
 authors = [{name = "Praneeth Namburi", email = "praneeth.namburi@gmail.com"}]
 readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.10"
 dynamic = ["version", "description"]
 keywords = ["data", "visualization", "analysis", "time series", "video", "images", "scientific"]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "License :: OSI Approved :: MIT License",
+  "Topic :: Scientific/Engineering",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+]
 dependencies = [
     "numpy<2",  # pinned transitively via tables<3.10 + decord; revisit in 1.3.0 once CI confirms PyTables >= 3.10
     "pandas",
@@ -24,18 +36,12 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest"]
-license = {file = "LICENSE"}
-classifiers = [
-  "Development Status :: 5 - Production/Stable",
-  "License :: OSI Approved :: MIT License",
-  "Topic :: Scientific/Engineering",
-  "Programming Language :: Python",
-  "Programming Language :: Python :: 3.10",
-  "Programming Language :: Python :: 3.11",
-  "Programming Language :: Python :: 3.12",
-  "Programming Language :: Python :: Implementation :: CPython",
-  "Programming Language :: Python :: Implementation :: PyPy",
-]
+
+[project.urls]
+Home = "https://github.com/praneethnamburi/datanavigator"
+Repository = "https://github.com/praneethnamburi/datanavigator"
+Issues = "https://github.com/praneethnamburi/datanavigator/issues"
+Documentation = "https://datanavigator.readthedocs.io/"
 
 [tool.black]
 line-length = 100
@@ -46,9 +52,3 @@ known_first_party = ["datanavigator"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-
-[project.urls]
-Home = "https://github.com/praneethnamburi/datanavigator"
-Repository = "https://github.com/praneethnamburi/datanavigator"
-Issues = "https://github.com/praneethnamburi/datanavigator/issues"
-Documentation = "https://datanavigator.readthedocs.io/"
