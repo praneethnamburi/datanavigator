@@ -239,7 +239,6 @@ class ComponentBrowser(GenericBrowser):
             np.arange(self.n_timepts) / self.n_timepts + self._data_index,
             self.data[self._data_index, :],
         )
-        # self.plot_handles['signal_full'][self._data_index].linewidth = 3
         plt.draw()
 
     def update_class_info_text(self, draw: bool = True) -> None:

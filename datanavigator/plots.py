@@ -6,11 +6,15 @@ Classes:
 """
 
 from __future__ import annotations
+
+import logging
 from typing import Union, Tuple, Any
 
 from matplotlib import pyplot as plt
 
 from .core import GenericBrowser
+
+_logger = logging.getLogger(__name__)
 
 
 class PlotBrowser(GenericBrowser):
@@ -97,7 +101,7 @@ class PlotBrowser(GenericBrowser):
                 start_state=s0.is_active,
             )
         except AssertionError:
-            print("Unable to add selectors")
+            _logger.debug("Unable to add selectors")
 
     def get_current_data(self):
         """

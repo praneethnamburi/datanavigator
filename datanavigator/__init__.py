@@ -117,7 +117,7 @@ def _check_ffmpeg():
     ffmpeg_found = check_command("ffmpeg")
 
     if not ffmpeg_found:
-        print("Cound not find ffmpeg.")
+        print("Could not find ffmpeg.")
         print_install_instructions()
 
 

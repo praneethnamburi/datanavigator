@@ -677,14 +677,6 @@ class Event:
             signal_id: event_data.to_portions()
             for signal_id, event_data in self._data.items()
         }
-        ret = {}
-        for signal_id, signal_events in self.to_dict().items():
-            ret[signal_id] = functools.reduce(
-                lambda a, b: a | b,
-                [portion.closed(*interval_limits) for interval_limits in signal_events],
-                portion.empty(),
-            )
-        return ret
 
 
 class Events(AssetContainer):

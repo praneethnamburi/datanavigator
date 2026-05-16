@@ -260,7 +260,9 @@ class VideoPlotBrowser(GenericBrowser):
         plot_handles["ax"] = ax
         plot_handles["fig"] = fig
         signal_ax = [v for k, v in plot_handles["ax"].items() if "signal" in k]
-        signal_ax[0].get_shared_x_axes().join(*signal_ax)
+        # matplotlib >=3.8 removed Grouper.join; use the modern sharex() API.
+        for _ax in signal_ax[1:]:
+            _ax.sharex(signal_ax[0])
         plot_handles["signal_ax"] = signal_ax
         return plot_handles
 
