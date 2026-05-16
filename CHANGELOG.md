@@ -14,12 +14,22 @@ Audit-and-polish release. No public API changes.
   authoritative runner; macOS / Windows are `continue-on-error` for
   this release while the `numpy<2` pin keeps `decord` / `tables`
   wheel availability flaky on those platforms.
+- `__all__` on `datanavigator/__init__.py`. `from datanavigator
+  import *` now exposes 39 documented names (down from 53 — dropped
+  the stdlib leaks `os` / `sys` / `shutil` and the 11 submodule
+  attributes). Submodule access via `datanavigator.utils.X` or
+  `from datanavigator import utils` is unchanged.
 - `TODO.md` seeded with deferred-to-1.3.0 items, nice-to-have polish,
   and stretch goals.
 - `[project.optional-dependencies] dev = ["pytest"]` in
   `pyproject.toml`, plus `pytest` in `requirements.yml` (previously
   the test suite was unrunnable as-shipped — no env in the repo
   could run it).
+- New regression tests in `tests/test_pointtracking.py`:
+  `test_video_annotation_to_dlc_populates_values` (synthetic) and
+  `test_video_annotation_to_dlc_real_data_roundtrip` (skipif-gated
+  against the OPR02 DLC fixture on the S: drive). Pin the
+  chained-assignment fix above.
 
 ### Changed
 - **Cross-platform default paths.** On macOS / Linux,
@@ -51,6 +61,20 @@ Audit-and-polish release. No public API changes.
   This was a latent bug surfaced by the 1.2.0 audit's fresh-env
   test run (matplotlib 3.10.9). `test_video_plot_browser_init`
   passes again.
+- `VideoAnnotation.to_dlc` no longer uses pandas chained assignment
+  (`df.loc[row][col] = val`), which pandas emits a `FutureWarning`
+  on every call and which will silently no-op once Copy-on-Write
+  becomes the default in pandas 3.0. Validated byte-equivalent to
+  the pre-fix code on real OPR02 4-point DLC labeled-data (438
+  frames × 4 labels = 1752 annotations).
+- `tests/conftest.py` now sets `matplotlib.use("Agg", force=True)`
+  before any pyplot import, so the test suite runs cleanly headless
+  without depending on `MPLBACKEND=Agg` being set in the
+  environment.
+- `tests/test_opticalflow.py::test_lucas_kanade_rstc` no longer
+  returns a tuple (pytest `PytestReturnNotNoneWarning`); the
+  removed return statement was replaced with shape assertions on
+  the reverse / RSTC paths.
 - Typo in the ffmpeg-not-found warning ("Cound" → "Could") at
   `datanavigator/__init__.py`.
 - Dead code after the early return in `Event.to_portions`.

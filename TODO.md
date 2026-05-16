@@ -38,15 +38,16 @@ authoritative roadmap lives in
 - `components.py` — simplify the verbose palette idiom
   `plt.get_cmap("tab20")([np.r_[0:1.5:0.05]])[0][:, :3]` to
   `plt.cm.tab20(np.linspace(0, 1, 20))[:, :3]`.
-- `conftest.py` — add a matplotlib `Agg` autouse fixture so the test
-  suite doesn't depend on the `MPLBACKEND=Agg` env var being set
-  externally (CI sets it; local devs may forget).
-- Add `__all__` to `__init__.py` so `from datanavigator import *`
-  (used by `pn-utilities/pntools/gui.py`) has a stable surface.
 - `pointtracking.py:861-887` — `rstc_paths` dict in
   `check_labels_with_lk` is populated by slice-assignment but never
   returned. Dead-but-populated state; safe removal requires deleting
   both the init at line 861 and the fill at line 885.
+- Suppress the ~80 `FigureCanvasAgg is non-interactive` UserWarnings
+  in the test suite via a `pytest` `filterwarnings` entry (the
+  warnings come from `plt.show(block=False)` calls in production
+  code that are intentional in interactive mode and inert under
+  Agg). Cleaner alternative: have the production code skip
+  `plt.show` when the backend is non-interactive.
 
 ## Stretch
 
