@@ -424,9 +424,10 @@ def is_pathname_valid(pathname: str) -> bool:
                         return False
                 elif exc.errno in {errno.ENAMETOOLONG, errno.ERANGE}:
                     return False
-    # If a "TypeError" exception was raised, it almost certainly has the
-    # error message "embedded NUL character" indicating an invalid pathname.
-    except TypeError as exc:
+    # An "embedded NUL character" raises TypeError on older Python and
+    # ValueError on Python 3.5+ (via os.lstat). Either way the pathname
+    # is invalid.
+    except (TypeError, ValueError):
         return False
     # If no exception was raised, all path components and hence this
     # pathname itself are valid. (Praise be to the curmudgeonly python.)

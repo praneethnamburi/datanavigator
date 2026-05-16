@@ -1,4 +1,5 @@
 import os
+import sys
 import numpy as np
 from pathlib import Path
 import pytest
@@ -97,7 +98,14 @@ def test_Video(video_fname):
 
 def test_is_pathname_valid(tmp_path_factory):
     assert is_pathname_valid(str(tmp_path_factory.getbasetemp() / "abc12")) == True
-    assert is_pathname_valid(str(tmp_path_factory.getbasetemp() / "<")) == False
+    # The set of invalid path characters is platform-specific. Windows
+    # reserves `< > : " | ? * /`; POSIX reserves only `/` and NUL inside a
+    # path component. Pick a char that is invalid on the running OS.
+    if sys.platform.startswith("win"):
+        invalid_path = str(tmp_path_factory.getbasetemp() / "<")
+    else:
+        invalid_path = str(tmp_path_factory.getbasetemp()) + "/abc\x00def"
+    assert is_pathname_valid(invalid_path) == False
 
 
 def test_is_path_creatable(tmp_path_factory):
@@ -110,6 +118,8 @@ def test_is_path_exists_or_creatable(tmp_path_factory):
         is_path_exists_or_creatable(str(tmp_path_factory.getbasetemp() / "abc12"))
         == True
     )
-    assert (
-        is_path_exists_or_creatable(str(tmp_path_factory.getbasetemp() / "<")) == False
-    )
+    if sys.platform.startswith("win"):
+        invalid_path = str(tmp_path_factory.getbasetemp() / "<")
+    else:
+        invalid_path = str(tmp_path_factory.getbasetemp()) + "/abc\x00def"
+    assert is_path_exists_or_creatable(invalid_path) == False
