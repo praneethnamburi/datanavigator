@@ -1,3 +1,12 @@
+# Force the non-interactive Agg backend before any pyplot import so the
+# test suite runs cleanly headless (CI, local devs without an MPLBACKEND
+# env var set). The previous arrangement relied on MPLBACKEND=Agg in the
+# environment, which silently degraded into 84 "FigureCanvasAgg cannot
+# be shown" warnings whenever the env var was missing.
+import matplotlib
+
+matplotlib.use("Agg", force=True)
+
 import pytest
 import pysampled
 
