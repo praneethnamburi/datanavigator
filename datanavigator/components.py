@@ -11,7 +11,7 @@ import numpy as np
 import pysampled
 from matplotlib import pyplot as plt
 from matplotlib.gridspec import GridSpec
-from typing import Optional, List, Dict, Union, Any
+from typing import Any
 
 from . import utils
 from .core import GenericBrowser
@@ -22,11 +22,11 @@ class ComponentBrowser(GenericBrowser):
         self,
         data: np.ndarray,
         data_transform: np.ndarray,
-        labels: Optional[np.ndarray] = None,
-        figure_handle: Optional[plt.Figure] = None,
-        class_names: Optional[Dict[int, str]] = None,
-        desired_class_names: Optional[Dict[int, str]] = None,
-        annotation_names: Optional[Dict[int, str]] = None,
+        labels: np.ndarray | None = None,
+        figure_handle: plt.Figure | None = None,
+        class_names: dict[int, str] | None = None,
+        desired_class_names: dict[int, str] | None = None,
+        annotation_names: dict[int, str] | None = None,
     ):
         """
         Initialize the ComponentBrowser.
@@ -35,11 +35,11 @@ class ComponentBrowser(GenericBrowser):
             data (np.ndarray): 2D array with number of signals on dim1, and number of time points on dim2.
             data_transform (np.ndarray): Transformed data, still a 2D array with number of signals x number of components.
                 For example, transformed using one of (sklearn.decomposition.PCA, umap.UMAP, sklearn.manifold.TSNE, sklearn.decomposition.FastICA)
-            labels (Optional[np.ndarray]): n_signals x 1 array with each entry representing the class of each signal piece.
-            figure_handle (Optional[plt.Figure]): Matplotlib figure handle.
-            class_names (Optional[Dict[int, str]]): Dictionary of class names.
-            desired_class_names (Optional[Dict[int, str]]): Dictionary of desired class names.
-            annotation_names (Optional[Dict[int, str]]): Dictionary of annotation names.
+            labels (np.ndarray | None): n_signals x 1 array with each entry representing the class of each signal piece.
+            figure_handle (plt.Figure | None): Matplotlib figure handle.
+            class_names (dict[int, str] | None): Dictionary of class names.
+            desired_class_names (dict[int, str] | None): Dictionary of desired class names.
+            annotation_names (dict[int, str] | None): Dictionary of annotation names.
 
         This GUI is meant to be used and extended for
           - 'corrections', where classes are modified / assigned
@@ -194,7 +194,7 @@ class ComponentBrowser(GenericBrowser):
         return self.data.shape[-1]
 
     @property
-    def colors(self) -> List[tuple]:
+    def colors(self) -> list[tuple]:
         """Return the colors for each class."""
         return [cl.color for cl in self.classes]
 
@@ -287,11 +287,11 @@ class ComponentBrowser(GenericBrowser):
         if draw:
             plt.draw()
 
-    def toggle_mode(self, event: Optional[Any] = None) -> None:
+    def toggle_mode(self, event: Any | None = None) -> None:
         """Toggle between correction and annotation modes.
 
         Args:
-            event (Optional[Any]): The key event.
+            event (Any | None): The key event.
         """
         self._mode = {"correction": "annotation", "annotation": "correction"}[
             self._mode
@@ -299,12 +299,12 @@ class ComponentBrowser(GenericBrowser):
         self.update_mode_text()
 
     def update_colors(
-        self, data_idx: Optional[List[int]] = None, draw: bool = True
+        self, data_idx: list[int] | None = None, draw: bool = True
     ) -> None:
         """Update the colors of the plot.
 
         Args:
-            data_idx (Optional[List[int]]): List of data indices to update.
+            data_idx (list[int] | None): list of data indices to update.
             draw (bool): Whether to draw the plot after updating.
         """
         if data_idx is None:
@@ -335,11 +335,11 @@ class ComponentBrowser(GenericBrowser):
         self.update_colors(draw=False)
         plt.draw()
 
-    def clear_axes(self, event: Optional[Any] = None) -> None:
+    def clear_axes(self, event: Any | None = None) -> None:
         """Clear the axes.
 
         Args:
-            event (Optional[Any]): The key event.
+            event (Any | None): The key event.
         """
         self.plot_handles["ax_history_signal"].clear()
         plt.draw()
@@ -376,11 +376,11 @@ class ComponentBrowser(GenericBrowser):
                             f"Adding annotation {this_annotation} to signal number {this_data_idx}"
                         )
 
-    def classlabels_to_dict(self) -> Dict[int, Dict[str, Union[int, str, List[str]]]]:
+    def classlabels_to_dict(self) -> dict[int, dict[str, int | str | list[str]]]:
         """Convert class labels to a dictionary.
 
         Returns:
-            Dict[int, Dict[str, Union[int, str, List[str]]]]: Dictionary of class labels.
+            dict[int, dict[str, int | str | list[str]]]: Dictionary of class labels.
         """
         fields_to_save = (
             "label",
@@ -395,12 +395,12 @@ class ComponentBrowser(GenericBrowser):
         return ret
 
     def set_classlabels(
-        self, classlabels_dict: Dict[int, Dict[str, Union[int, str, List[str]]]]
+        self, classlabels_dict: dict[int, dict[str, int | str | list[str]]]
     ) -> None:
         """Set class labels from a dictionary.
 
         Args:
-            classlabels_dict (Dict[int, Dict[str, Union[int, str, List[str]]]]): Dictionary of class labels.
+            classlabels_dict (dict[int, dict[str, int | str | list[str]]]): Dictionary of class labels.
         """
         assert set(classlabels_dict.keys()) == set(range(self.n_signals))
         self.classes = [
@@ -412,20 +412,20 @@ class ClassLabel:
     def __init__(
         self,
         label: int,
-        name: Optional[str] = None,
+        name: str | None = None,
         assignment_type: str = "auto",
-        annotations: Optional[List[str]] = None,
-        original_label: Optional[int] = None,
+        annotations: list[str] | None = None,
+        original_label: int | None = None,
     ):
         """
         Initialize a ClassLabel.
 
         Args:
             label (int): Class label (0 - unclassified, 1 - non-resonant, 2 - resonant, etc.).
-            name (Optional[str]): Name of the class.
+            name (str | None): Name of the class.
             assignment_type (str): Class label was assigned automatically ('auto') or manually ('manual').
-            annotations (Optional[List[str]]): List of annotations for the class instance.
-            original_label (Optional[int]): Original class label.
+            annotations (list[str] | None): list of annotations for the class instance.
+            original_label (int | None): Original class label.
         """
         assert label >= 0
         self._label = int(label)

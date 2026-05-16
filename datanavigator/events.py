@@ -14,7 +14,7 @@ import json
 import os
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable
 
 import numpy as np
 import portion as P
@@ -30,11 +30,11 @@ class _PNInterval(P.Interval):
     """Extended portion Interval class with additional properties."""
 
     @property
-    def atomic_durations(self) -> List[float]:
-        """List of atomic durations in the event. In this case, an atom is one interval with start and end times.
+    def atomic_durations(self) -> list[float]:
+        """list of atomic durations in the event. In this case, an atom is one interval with start and end times.
 
         Returns:
-            List[float]: Atomic durations.
+            list[float]: Atomic durations.
         """
         return [xi.upper - xi.lower for xi in self]
 
@@ -75,17 +75,17 @@ class EventData:
 
     def __init__(
         self,
-        default: Optional[List] = None,
-        added: Optional[List] = None,
-        removed: Optional[List] = None,
-        tags: Optional[List] = None,
+        default: list | None = None,
+        added: list | None = None,
+        removed: list | None = None,
+        tags: list | None = None,
         algorithm_name: str = "",
-        params: Optional[Dict] = None,
+        params: dict | None = None,
     ) -> None:
-        def _to_list(x: Any) -> List:
+        def _to_list(x: Any) -> list:
             return [] if x is None else x
 
-        def _1d_to_2d(x: List) -> List:
+        def _1d_to_2d(x: list) -> list:
             v = np.asarray(x)
             if (
                 v.ndim == 1
@@ -107,7 +107,7 @@ class EventData:
             1,
         ), "All events must have the same size."
 
-    def asdict(self) -> Dict:
+    def asdict(self) -> dict:
         """Convert the event data to a dictionary."""
         return dict(
             default=self.default,
@@ -129,7 +129,7 @@ class EventData:
             return size_set.pop()
         raise ValueError("All events must have the same size.")
 
-    def get_times(self) -> List:
+    def get_times(self) -> list:
         """Get the times of all events."""
         x = self.default + self.added
         x.sort()
@@ -160,7 +160,7 @@ class EventData:
         return item in self.to_portions()
 
     @staticmethod
-    def _process_inp(other: Union["portion.Interval", Tuple]) -> portion.Interval:
+    def _process_inp(other: "portion.Interval" | tuple) -> portion.Interval:
         """Process the input to ensure it is an interval."""
         if other.__class__.__name__ == EventData.__name__:
             return other.to_portions()
@@ -169,7 +169,7 @@ class EventData:
             other = portion.closed(*other)
         return other
 
-    def overlap_duration(self, other: Union["portion.Interval", Tuple]) -> float:
+    def overlap_duration(self, other: "portion.Interval" | tuple) -> float:
         """Calculate the duration of overlap with another interval."""
         other = self._process_inp(other)
         return (self.to_portions() & other).duration
@@ -186,11 +186,11 @@ class Event:
         data_id_func (Callable): Function to get the current data ID from the parent UI.
         color (str): Color of the event. Defaults to a random color.
         pick_action (str): Action to take when picking an event ('overwrite' or 'append'). Use overwrite if there can only be one sequence per 'signal'. If there can be multiple, use 'append'. Defaults to overwrite
-        ax_list (List): List of axes on which to show the event.
-        win_remove (Tuple): Window relative to the mouse position to search for removing an event. Defaults to (-0.1, 0.1).
-        win_add (Tuple): Window relative to the mouse position to search for adding an event. Defaults to (-0.25, 0.25).
+        ax_list (list): list of axes on which to show the event.
+        win_remove (tuple): Window relative to the mouse position to search for removing an event. Defaults to (-0.1, 0.1).
+        win_add (tuple): Window relative to the mouse position to search for adding an event. Defaults to (-0.25, 0.25).
         data_func (Callable): Function to process the data.
-        plot_kwargs (Dict): Keyword arguments for plotting. Commonly used keys are 'display_type' (line or fill) and 'alpha' to set the transparency level.
+        plot_kwargs (dict): Keyword arguments for plotting. Commonly used keys are 'display_type' (line or fill) and 'alpha' to set the transparency level.
     """
 
     def __init__(
@@ -198,12 +198,12 @@ class Event:
         name: str,
         size: int,
         fname: str,
-        data_id_func: Optional[Callable] = lambda: None,
-        color: Union[str, int] = "random",
+        data_id_func: Callable | None = lambda: None,
+        color: str | int = "random",
         pick_action: str = "overwrite",
-        ax_list: Optional[List] = None,
-        win_remove: Tuple[float, float] = (-0.1, 0.1),
-        win_add: Tuple[float, float] = (-0.25, 0.25),
+        ax_list: list | None = None,
+        win_remove: tuple[float, float] = (-0.1, 0.1),
+        win_add: tuple[float, float] = (-0.25, 0.25),
         data_func: Callable = float,
         **plot_kwargs,
     ) -> None:
@@ -236,7 +236,7 @@ class Event:
 
     @classmethod
     def _from_existing_file(
-        cls, fname: str, data_id_func: Optional[Callable] = lambda: None
+        cls, fname: str, data_id_func: Callable | None = lambda: None
     ) -> Event:
         """Create an Event object by reading an existing JSON file."""
         h, _ = cls._read_json_file(fname)
@@ -272,7 +272,7 @@ class Event:
     @classmethod
     def from_data(
         cls,
-        data: Dict,
+        data: dict,
         name: str = "Event",
         fname: str = "",
         overwrite: bool = False,
@@ -357,7 +357,7 @@ class Event:
         """Check if all keys are tuples."""
         return all([type(x) == tuple for x in self._data.keys()])
 
-    def get_header(self) -> Dict:
+    def get_header(self) -> dict:
         """Get the header information of the event."""
         return dict(
             name=self.name,
@@ -372,7 +372,7 @@ class Event:
         )
 
     @staticmethod
-    def _read_json_file(fname: str) -> Tuple[Dict, Dict]:
+    def _read_json_file(fname: str) -> tuple[dict, dict]:
         """Read a JSON file and return the header and data."""
         with open(fname, "r") as f:
             header, data = json.load(f)
@@ -382,7 +382,7 @@ class Event:
             data = {k: EventData(**v) for k, v in data.items()}
         return header, data
 
-    def load(self) -> Tuple[Dict, Dict]:
+    def load(self) -> tuple[dict, dict]:
         """Load the event data from the file."""
         if os.path.exists(self.fname):
             header, data = self._read_json_file(self.fname)
@@ -415,10 +415,10 @@ class Event:
             event (Any): The event to add.
         """
 
-        def strictly_increasing(_list: List) -> bool:
+        def strictly_increasing(_list: list) -> bool:
             return all(x < y for x, y in zip(_list, _list[1:]))
 
-        def _get_lines() -> List:
+        def _get_lines() -> list:
             """Return non-empty lines in the axis where event was invoked, or else in all lines in the figure."""
             if event.inaxes is not None:
                 return [
@@ -560,11 +560,11 @@ class Event:
         print(self.name, {True: "remove", False: "delete"}[_removed], data_id, sequence)
         self.update_display()
 
-    def get_current_event_times(self) -> List:
+    def get_current_event_times(self) -> list:
         """Get the current event times."""
         return self._data.get(self.data_id_func(), EventData()).get_times()
 
-    def _get_display_funcs(self) -> Tuple[Callable, Callable]:
+    def _get_display_funcs(self) -> tuple[Callable, Callable]:
         """Get the display functions."""
         display_type = self.plot_kwargs.get("display_type", "line")
         assert display_type in ("line", "fill")
@@ -596,11 +596,11 @@ class Event:
         _, update_func = self._get_display_funcs()
         update_func(draw)
 
-    def _get_ylim(self, this_ax: plt.Axes, type: str = "data") -> Tuple[float, float]:
+    def _get_ylim(self, this_ax: plt.Axes, type: str = "data") -> tuple[float, float]:
         """Get the y-axis limits."""
         if type == "data":
             try:
-                def nanlim(x: np.ndarray, default) -> Tuple[float, float]:
+                def nanlim(x: np.ndarray, default) -> tuple[float, float]:
                     if np.isnan(x).all():
                         return default
                     return np.nanmin(x), np.nanmax(x)
@@ -660,7 +660,7 @@ class Event:
         if draw:
             plt.draw()
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert the event data to a dictionary."""
         event_data = self._data
         if self.pick_action == "overwrite":
@@ -670,7 +670,7 @@ class Event:
             ret = {k: v.get_times() for k, v in event_data.items()}
         return ret
 
-    def to_portions(self) -> Dict:
+    def to_portions(self) -> dict:
         """Convert the event data to portions."""
         assert self.size == 2
         return {
@@ -694,14 +694,14 @@ class Events(AssetContainer):
         size: int,
         fname: str,
         data_id_func: Callable,
-        color: Union[str, int],
+        color: str | int,
         pick_action: str = "overwrite",
-        ax_list: Optional[List] = None,
-        win_remove: Tuple[float, float] = (-0.1, 0.1),
-        win_add: Tuple[float, float] = (-0.25, 0.25),
-        add_key: Optional[str] = None,
-        remove_key: Optional[str] = None,
-        save_key: Optional[str] = None,
+        ax_list: list | None = None,
+        win_remove: tuple[float, float] = (-0.1, 0.1),
+        win_add: tuple[float, float] = (-0.25, 0.25),
+        add_key: str | None = None,
+        remove_key: str | None = None,
+        save_key: str | None = None,
         show: bool = True,
         data_func: Callable = float,
         **plot_kwargs,
@@ -714,14 +714,14 @@ class Events(AssetContainer):
             size (int): Length of the sequence. For example, if this is 2, then the event is a pair of start and end times.
             fname (str): File name to save the event.
             data_id_func (Callable): Function to get the current data ID from the parent UI.
-            color (Union[str, int]): Color used to display the event
+            color (str | int): Color used to display the event
             pick_action (str, optional): Action to take when picking an event ('overwrite' or 'append'). Use overwrite if there can only be one sequence per 'signal'. If there can be multiple, use 'append'. Defaults to overwrite. Defaults to 'overwrite'.
-            ax_list (Optional[List], optional): List of axes on which to show the event. Defaults to None.
-            win_remove (Tuple[float, float], optional): Window relative to the mouse position to search for removing an event. Defaults to (-0.1, 0.1).
-            win_add (Tuple[float, float], optional): Window relative to the mouse position to search for adding an event. Defaults to (-0.25, 0.25). For future use.
-            add_key (Optional[str], optional): Keyboard shortcut for adding the event. Defaults to None.
-            remove_key (Optional[str], optional): Keyboard shortcut for removing the event. Defaults to None.
-            save_key (Optional[str], optional): Keyboard shortcut for saving the events to a JSON file. Defaults to None.
+            ax_list (list | None, optional): list of axes on which to show the event. Defaults to None.
+            win_remove (tuple[float, float], optional): Window relative to the mouse position to search for removing an event. Defaults to (-0.1, 0.1).
+            win_add (tuple[float, float], optional): Window relative to the mouse position to search for adding an event. Defaults to (-0.25, 0.25). For future use.
+            add_key (str | None, optional): Keyboard shortcut for adding the event. Defaults to None.
+            remove_key (str | None, optional): Keyboard shortcut for removing the event. Defaults to None.
+            save_key (str | None, optional): Keyboard shortcut for saving the events to a JSON file. Defaults to None.
             show (bool, optional): Event visibility. Defaults to True.
             data_func (Callable, optional): Function to apply on the incoming event. Intended use is for type casting. Defaults to float.
 
@@ -759,10 +759,10 @@ class Events(AssetContainer):
         self,
         fname: str,
         data_id_func: Callable,
-        ax_list: Optional[List] = None,
-        add_key: Optional[str] = None,
-        remove_key: Optional[str] = None,
-        save_key: Optional[str] = None,
+        ax_list: list | None = None,
+        add_key: str | None = None,
+        remove_key: str | None = None,
+        save_key: str | None = None,
         show: bool = True,
         data_func: Callable = float,
         **plot_kwargs,
@@ -773,10 +773,10 @@ class Events(AssetContainer):
         Args:
             fname (str): File name to load the events.
             data_id_func (Callable): Function to get the current data ID from the parent UI.
-            ax_list (Optional[List], optional): List of axes on which to show the event. Defaults to None.
-            add_key (Optional[str], optional): Keyboard shortcut for adding the event. Defaults to None.
-            remove_key (Optional[str], optional): Keyboard shortcut for removing the event. Defaults to None.
-            save_key (Optional[str], optional): Keyboard shortcut for saving the events to a JSON file. Defaults to None.
+            ax_list (list | None, optional): list of axes on which to show the event. Defaults to None.
+            add_key (str | None, optional): Keyboard shortcut for adding the event. Defaults to None.
+            remove_key (str | None, optional): Keyboard shortcut for removing the event. Defaults to None.
+            save_key (str | None, optional): Keyboard shortcut for saving the events to a JSON file. Defaults to None.
             show (bool, optional): Event visibility. Defaults to True.
             data_func (Callable, optional): Function to apply on the incoming event. Intended use is for type casting. Defaults to float.
 
@@ -813,15 +813,15 @@ class Events(AssetContainer):
             plt.draw()
 
 
-def _find_nearest_idx_val(array: List[float], value: float) -> Tuple[int, float]:
+def _find_nearest_idx_val(array: list[float], value: float) -> tuple[int, float]:
     """Find the index and value of the nearest element in the array to the given value.
 
     Args:
-        array (list[float]): List of values.
+        array (list[float]): list of values.
         value (float): Value to find the nearest element for.
 
     Returns:
-        Tuple[int, float]: Index and value of the nearest element.
+        tuple[int, float]: Index and value of the nearest element.
     """
     array = np.asarray(array)
     idx = (np.abs(array - value)).argmin()

@@ -8,7 +8,7 @@ Classes:
 from __future__ import annotations
 
 import logging
-from typing import Union, Tuple, Any
+from typing import Any
 
 from matplotlib import pyplot as plt
 
@@ -27,7 +27,7 @@ class PlotBrowser(GenericBrowser):
     def __init__(
         self,
         plot_data: list,
-        plot_func: Union[Tuple[callable, callable], callable],
+        plot_func: tuple[callable, callable] | callable,
         figure_handle: plt.Figure = None,
         **plot_kwargs,
     ):
@@ -35,7 +35,7 @@ class PlotBrowser(GenericBrowser):
         Initialize the PlotBrowser.
 
         Args:
-            plot_data (list): List of data objects to browse.
+            plot_data (list): list of data objects to browse.
             plot_func (callable): Plotting function or a tuple of (setup_func, update_func).
 
                 plot_func can be a tuple (setup_func, update_func), or just one plotting function - update_func
