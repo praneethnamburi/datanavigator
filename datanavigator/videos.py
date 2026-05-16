@@ -8,7 +8,10 @@ Classes:
 
 from __future__ import annotations
 
+import functools
 import os
+import shutil
+import subprocess
 from datetime import datetime, timedelta
 from typing import Callable, Dict, Optional, Union
 
@@ -19,6 +22,30 @@ from matplotlib.gridspec import GridSpec
 
 from . import _config
 from .core import GenericBrowser
+
+
+@functools.lru_cache(maxsize=1)
+def _pick_vcodec() -> str:
+    """Return a usable H.264 encoder name for the local ffmpeg install.
+
+    Prefers ``h264_nvenc`` (NVIDIA hardware) when ffmpeg reports it as
+    available; otherwise falls back to ``libx264`` (software). Cached after
+    the first call. The previous releases hardcoded ``h264_nvenc``, which
+    fails on CPU-only hosts (CI runners, machines without NVIDIA drivers)
+    with ``Unknown encoder 'h264_nvenc'`` or ``Cannot load nvcuda.dll``.
+    """
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-encoders"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "libx264"
+    if "h264_nvenc" in (result.stdout or ""):
+        return "h264_nvenc"
+    return "libx264"
 
 
 class VideoBrowser(GenericBrowser):
@@ -143,8 +170,6 @@ class VideoBrowser(GenericBrowser):
 
             use_subprocess = False
         except ModuleNotFoundError:
-            import subprocess
-
             use_subprocess = True
 
         if start_frame is None:
@@ -163,13 +188,14 @@ class VideoBrowser(GenericBrowser):
                 os.path.splitext(self.name)[0]
                 + "_s{:.3f}_e{:.3f}.mp4".format(start_time, end_time),
             )
+        vcodec = _pick_vcodec()
         if use_subprocess:
             subprocess.getoutput(
-                f'ffmpeg -ss {start_time} -i "{self.fname}" -r {out_rate} -t {dur} -vcodec h264_nvenc "{fname_out}"'
+                f'ffmpeg -ss {start_time} -i "{self.fname}" -r {out_rate} -t {dur} -vcodec {vcodec} "{fname_out}"'
             )
         else:
             ffmpeg.input(self.fname, ss=start_time).output(
-                fname_out, vcodec="h264_nvenc", t=dur, r=out_rate
+                fname_out, vcodec=vcodec, t=dur, r=out_rate
             ).run()
         return fname_out
 
@@ -343,7 +369,13 @@ class VideoPlotBrowser(GenericBrowser):
             self.figure.savefig(os.path.join(sav_dir, f"{frame_count:08d}.png"))
 
         print("Creating video from image sequence...")
-        cmd = f'cd "{sav_dir}" && ffmpeg -framerate {self.fps} -start_number {start_frame} -i %08d.png -c:v h264_nvenc -b:v 10M -maxrate 12M -bufsize 24M -vf scale="-1:1080" -an "{sav_dir}.mp4"'
+        vcodec = _pick_vcodec()
+        cmd = (
+            f'cd "{sav_dir}" && ffmpeg -framerate {self.fps} '
+            f'-start_number {start_frame} -i %08d.png -c:v {vcodec} '
+            f'-b:v 10M -maxrate 12M -bufsize 24M -vf scale="-1:1080" '
+            f'-an "{sav_dir}.mp4"'
+        )
         subprocess.getoutput(cmd)
 
         print("Removing temporary folder...")
