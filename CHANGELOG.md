@@ -13,7 +13,9 @@ Audit-and-polish release. No public API changes.
   `{ubuntu-22.04, macos-latest, windows-latest}`. Ubuntu is the
   authoritative runner; macOS / Windows are `continue-on-error` for
   this release while the `numpy<2` pin keeps `decord` / `tables`
-  wheel availability flaky on those platforms.
+  wheel availability flaky on those platforms. ffmpeg is installed
+  via OS-conditional steps (`apt`, `brew`, `choco`) so the workflow
+  works on Apple Silicon `macos-latest`.
 - `__all__` on `datanavigator/__init__.py`. `from datanavigator
   import *` now exposes 39 documented names (down from 53 — dropped
   the stdlib leaks `os` / `sys` / `shutil` and the 11 submodule
@@ -56,6 +58,20 @@ Audit-and-polish release. No public API changes.
   reconstruct the conventions from CONVENTIONS.md.
 
 ### Fixed
+- `VideoBrowser.extract_clip` and `VideoPlotBrowser.extract_clip` now
+  fall back to `libx264` when `h264_nvenc` (NVIDIA hardware encoder)
+  is unavailable. Previously hardcoded; failed with
+  `Unknown encoder 'h264_nvenc'` or `Cannot load nvcuda.dll` on
+  CPU-only hosts, CI runners, and macOS / Apple Silicon.
+- `is_pathname_valid` now catches `ValueError` (which Python 3.5+
+  raises for "embedded null character" in `os.lstat`) in addition
+  to the stale `TypeError` catch. The function now returns `False`
+  for NUL-bearing paths on modern Python instead of leaking the
+  exception.
+- `tests/test_utils.py` path-validity assertions are now
+  platform-aware: Windows tests with `<` (a reserved char on
+  Windows), POSIX tests with an embedded NUL byte. The old test
+  failed on Linux because POSIX accepts `<` in path components.
 - `VideoPlotBrowser` setup no longer crashes on matplotlib ≥ 3.8:
   `Grouper.join` was removed in 3.8, replaced by `Axes.sharex()`.
   This was a latent bug surfaced by the 1.2.0 audit's fresh-env
