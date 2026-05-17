@@ -17,6 +17,7 @@ from matplotlib import axes as maxes
 from matplotlib import pyplot as plt
 
 from . import utils
+from ._qt import find_qt_window
 from .assets import Buttons, MemorySlots, Selectors, StateVariables
 from .events import Events
 
@@ -54,6 +55,12 @@ class GenericBrowser:
             figure_handle = plt.figure()
         assert isinstance(figure_handle, plt.Figure)
         self.figure = figure_handle
+        # Soft Qt mode (1.4.0): if matplotlib is on a Qt backend, hold a
+        # reference to the QMainWindow it built around this figure. Phase 2+
+        # widget migrations attach native Qt widgets to it; under non-Qt
+        # backends (Agg, TkAgg, inline) this is None and the asset managers
+        # fall back to their pre-1.4 mpl-axes-based rendering.
+        self._qt_window = find_qt_window(figure_handle)
         self._keypressdict = {}  # managed by add_key_binding
         self._bindings_removed = {}
 

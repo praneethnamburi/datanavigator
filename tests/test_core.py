@@ -13,6 +13,20 @@ def test_browser_initialization():
     GenericBrowser(figure_handle=plt.figure())
 
 
+def test_qt_window_is_none_under_agg():
+    """Soft Qt mode: on the Agg backend the test suite uses, _qt_window is None.
+
+    Phase 1 of the 1.4.0 refactor exposes ``self._qt_window``: the
+    QMainWindow matplotlib builds around the figure under QtAgg, or None
+    on any non-Qt backend. The formal pytest suite runs on Agg (see
+    conftest.py), so the discovery helper must return None here. The
+    QtAgg path is exercised by tests/qt_learning/03_phase1_smoke.py.
+    """
+    assert mpl.get_backend().lower() == "agg"
+    b = GenericBrowser(figure_handle=plt.figure())
+    assert b._qt_window is None
+
+
 class TestGenericBrowser:
     @pytest.fixture
     def browser(self, matplotlib_figure):
