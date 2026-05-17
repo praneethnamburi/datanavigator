@@ -86,7 +86,7 @@ from .utils import (
     is_video,
     ticks_from_times,
 )
-from .video_reader import VideoReader, cpu
+from .video_reader import VideoReader, cpu, precompute_toc
 
 from .examples import (
     get_example_video,
@@ -146,6 +146,7 @@ __all__ = [
     "Video",
     "VideoReader",
     "cpu",
+    "precompute_toc",
     "VideoAnnotation",
     "VideoAnnotations",
     "VideoPointAnnotator",

@@ -147,3 +147,144 @@ def test_video_gray_uses_rgb_to_gray(synthetic_clip):
     # change the right-hand side and break equality.
     expected = cv.cvtColor(v[0].asnumpy(), cv.COLOR_RGB2GRAY)
     assert np.array_equal(gray, expected)
+
+
+# ---------- TOC sidecar cache ----------
+
+@pytest.fixture
+def fresh_clip(tmp_path) -> Path:
+    """Per-test clip in its own tmp dir, so the sidecar starts empty."""
+    out = tmp_path / "fresh.mp4"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i", f"testsrc=duration={DURATION_S}:size=64x48:rate={FPS}",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "12",
+            str(out),
+        ],
+        check=True,
+    )
+    return out
+
+
+def test_toc_first_open_builds_and_writes_sidecar(fresh_clip, capsys):
+    from datanavigator import VideoReader
+
+    sidecar = Path(str(fresh_clip) + ".dnav-toc.json")
+    assert not sidecar.exists()
+
+    vr = VideoReader(str(fresh_clip))
+    assert len(vr) == N_FRAMES
+    captured = capsys.readouterr()
+    assert "building TOC" in captured.out
+    assert sidecar.exists()
+
+
+def test_toc_second_open_hits_cache_silently(fresh_clip, capsys):
+    from datanavigator import VideoReader
+
+    VideoReader(str(fresh_clip))  # warm
+    capsys.readouterr()  # drain
+    VideoReader(str(fresh_clip))
+    captured = capsys.readouterr()
+    assert "building TOC" not in captured.out
+
+
+def test_toc_invalidates_on_mtime_change(fresh_clip, capsys):
+    from datanavigator import VideoReader
+
+    VideoReader(str(fresh_clip))  # warm
+    capsys.readouterr()
+
+    st = fresh_clip.stat()
+    # Bump mtime by 2 seconds (FAT resolution-safe).
+    os_path = str(fresh_clip)
+    new_mtime = st.st_mtime + 2.0
+    import os as _os
+    _os.utime(os_path, (st.st_atime, new_mtime))
+
+    VideoReader(os_path)
+    captured = capsys.readouterr()
+    assert "building TOC" in captured.out
+
+
+def test_toc_invalidates_on_content_change_same_size(fresh_clip, tmp_path, capsys):
+    """Two clips of identical size but different content must not alias."""
+    from datanavigator import VideoReader
+
+    # Materialise a second clip with different content but matched size.
+    alt = tmp_path / "alt.mp4"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i", f"smptebars=duration={DURATION_S}:size=64x48:rate={FPS}",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "12",
+            str(alt),
+        ],
+        check=True,
+    )
+
+    # Warm fresh_clip's cache, then overwrite the file with alt's bytes
+    # while preserving mtime (so only the head/tail SHA can detect the change).
+    VideoReader(str(fresh_clip))
+    capsys.readouterr()
+    original_mtime = fresh_clip.stat().st_mtime
+
+    import shutil as _shutil
+    _shutil.copyfile(alt, fresh_clip)
+    import os as _os
+    _os.utime(fresh_clip, (original_mtime, original_mtime))
+
+    VideoReader(str(fresh_clip))
+    captured = capsys.readouterr()
+    assert "building TOC" in captured.out
+
+
+def test_toc_corrupted_sidecar_triggers_rebuild(fresh_clip, capsys):
+    from datanavigator import VideoReader
+
+    VideoReader(str(fresh_clip))
+    capsys.readouterr()
+
+    sidecar = Path(str(fresh_clip) + ".dnav-toc.json")
+    sidecar.write_text("{not valid json")
+
+    VideoReader(str(fresh_clip))
+    captured = capsys.readouterr()
+    assert "building TOC" in captured.out
+    # Sidecar should be replaced with valid JSON
+    import json as _json
+    assert _json.loads(sidecar.read_text())["schema_version"] == 1
+
+
+def test_precompute_toc_batch_warmup(fresh_clip, tmp_path, capsys):
+    from datanavigator import VideoReader, precompute_toc
+
+    # A second clip with different content/size.
+    alt = tmp_path / "alt2.mp4"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i", f"testsrc=duration={DURATION_S * 2}:size=64x48:rate={FPS}",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "12",
+            str(alt),
+        ],
+        check=True,
+    )
+
+    results = precompute_toc([fresh_clip, alt], show_progress=False)
+    assert results[str(fresh_clip)] == "built"
+    assert results[str(alt)] == "built"
+    assert Path(str(fresh_clip) + ".dnav-toc.json").exists()
+    assert Path(str(alt) + ".dnav-toc.json").exists()
+
+    # Second call sees hits
+    results2 = precompute_toc([fresh_clip, alt], show_progress=False)
+    assert results2[str(fresh_clip)] == "hit"
+    assert results2[str(alt)] == "hit"
+
+    # Subsequent open is silent (cache hit)
+    capsys.readouterr()  # drain the precompute build noise (none, show_progress=False)
+    VideoReader(str(fresh_clip))
+    captured = capsys.readouterr()
+    assert "building TOC" not in captured.out

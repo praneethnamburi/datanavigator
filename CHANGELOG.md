@@ -34,10 +34,23 @@ on real lab videos.
   is **not** a runtime dependency.
 - `tests/test_video_reader.py` — unit-test coverage for the shim
   (indexing, slicing, `get_batch`, `len` / iteration, `get_avg_fps`,
-  `cpu` sentinel, `Video.gray` RGB-fix regression gate).
+  `cpu` sentinel, `Video.gray` RGB-fix regression gate, TOC sidecar
+  cache flow).
 - A `dnav_pyav_toc` reader entry in the parity harness
   (`tests/decord_pyav_parity/readers.py`) — confirms the vendored+
   wrapped reader matches the upstream PIMS reader row-for-row.
+- **TOC sidecar cache.** `PyAVReaderIndexed.__init__` walks every
+  packet in the file at open time to build the frame-index TOC —
+  that's the cost decord skipped (and was sometimes wrong because
+  of). To avoid paying it on every open, the wrapped reader now
+  caches the TOC next to the video as `<video>.dnav-toc.json`,
+  keyed on path + size + mtime + SHA-256 of the first/last 64 KiB.
+  Cache miss prints `datanavigator: building TOC for <name>...` and
+  saves a sidecar on success; cache hit is silent and sub-second.
+  Read-only data directories degrade gracefully (warning to stderr,
+  TOC built in memory anyway). `datanavigator.precompute_toc(paths,
+  force=False)` batch-warms the cache for a sequence of videos
+  before an interactive session.
 
 ### Changed
 - **Video-reading backend swapped from `decord` to PyAV+TOC**, with
