@@ -32,10 +32,16 @@ dependencies = [
     "av",
     "tables>=3.10",
     "tqdm",
+    "qtpy>=2.4",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest"]
+# qtpy is a binding-agnostic shim; a Qt binding still has to be installed.
+# `pip install datanavigator[qt]` pulls PyQt6 as the default binding. Users
+# whose env already has PyQt5 / PyQt6 / PySide2 / PySide6 don't need this
+# extra -- qtpy will pick up whichever is present.
+qt = ["PyQt6"]
 
 [project.urls]
 Home = "https://github.com/praneethnamburi/datanavigator"

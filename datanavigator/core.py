@@ -306,13 +306,20 @@ class GenericBrowser:
     def copy_to_clipboard(self):
         """
         Copy the current figure to the clipboard.
-        Requires PySide2. Install this optionally after the environment is set up as it can cause problems, or live without this feature.
+
+        Requires a Qt binding (PyQt5 / PyQt6 / PySide2 / PySide6); imported
+        lazily via ``qtpy`` so installs without Qt still get the rest of
+        the package. ``pip install datanavigator[qt]`` pulls PyQt6.
         """
-        from PySide2.QtGui import QClipboard, QImage
+        from qtpy.QtGui import QImage
+        from qtpy.QtWidgets import QApplication
 
         buf = io.BytesIO()
         self.figure.savefig(buf)
-        QClipboard().setImage(QImage.fromData(buf.getvalue()))
+        # Use the QApplication singleton clipboard. Direct QClipboard()
+        # instantiation worked on Qt5 but is disallowed on Qt6.
+        app = QApplication.instance() or QApplication([])
+        app.clipboard().setImage(QImage.fromData(buf.getvalue()))
         buf.close()
 
     def show_key_bindings(self, f: str = None, pos: str = "bottom right"):
