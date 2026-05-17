@@ -209,17 +209,36 @@ class TextView:
         self._text = None  # matplotlib Text artist (set only on the mpl path)
         self._overlay = None  # QtTextOverlay (set only on the Qt path)
         self._pos = _parse_pos(pos)
-        self.figure, self._ax = _parse_fax(
-            fax, ax_pos=(rescale(self._pos[0]), rescale(self._pos[1]), 0.02, 0.02)
-        )
 
-        # Try the Qt path first. ``make_text_overlay`` returns None for
-        # non-Qt canvases without importing qtpy, so this is safe on Agg.
-        from ._qt import make_text_overlay
-        self._overlay = make_text_overlay(self.figure, self._pos, self.text)
-        if self._overlay is None:
+        # Caller-supplied Axes: respect placement, stay on the mpl path.
+        if isinstance(fax, maxes.Axes):
+            self.figure = fax.figure
+            self._ax = fax
             self.setup()
             self.update()
+            return
+
+        # Figure or None: resolve the figure, then try the Qt overlay.
+        if fax is None:
+            self.figure = plt.figure()
+        else:
+            self.figure = fax
+
+        from ._qt import make_text_overlay
+        self._overlay = make_text_overlay(self.figure, self._pos, self.text)
+        if self._overlay is not None:
+            # Qt path: the QLabel overlay does the rendering; we deliberately
+            # skip creating a spacer mpl Axes (under Phase 2 we still made
+            # one and left it empty -- it showed up as a blank rectangle in
+            # the figure). DUSTrack hit this with statevariables.
+            self._ax = None
+            return
+
+        # mpl fallback: create the spacer Axes the Text artist lives on.
+        ax_pos = (rescale(self._pos[0]), rescale(self._pos[1]), 0.02, 0.02)
+        self._ax = self.figure.add_axes(ax_pos)
+        self.setup()
+        self.update()
 
     def parse_text(self, text: Union[List[str], dict]) -> List[str]:
         """Parse text input into a list of strings.

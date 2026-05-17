@@ -58,10 +58,10 @@ def main():
     ]
     for pos in positions:
         tv = TextView([f"hello from {pos}"], fax=fig, pos=pos)
-        ok = tv._overlay is not None and tv._text is None
+        ok = tv._overlay is not None and tv._text is None and tv._ax is None
         print(f"pos={pos!r:20s}  overlay={'ok' if ok else 'MISSING'}  "
-              f"mpl_artist={tv._text}")
-        assert ok, f"expected Qt overlay at pos={pos}, got mpl path"
+              f"mpl_artist={tv._text}  spacer_axes={tv._ax}")
+        assert ok, f"expected Qt overlay + no mpl spacer axes at pos={pos}"
 
     # Drive the asset managers end-to-end. They construct TextView under
     # the hood; we never touch the overlay class directly.
