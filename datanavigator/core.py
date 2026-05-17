@@ -131,8 +131,9 @@ class GenericBrowser:
             event: Event to handle.
         """
         if event.name == "key_press_event":
-            if event.key in self._keypressdict:
-                f = self._keypressdict[event.key][0]
+            key = self._resolve_keypress(event.key)
+            if key is not None:
+                f = self._keypressdict[key][0]
                 argspec = inspect.getfullargspec(f)[0]
                 if len(argspec) == 2 and argspec[1] == "event":
                     f(event)
@@ -142,6 +143,31 @@ class GenericBrowser:
                 self.memoryslots.update(event.key)
         elif event.name == "close_event":  # perform cleanup
             self.cleanup()
+
+    def _resolve_keypress(self, key):
+        """Look up a key in ``self._keypressdict`` with a case-insensitive
+        fallback for single-letter keys.
+
+        matplotlib reports keys as uppercase when Shift is held (or
+        Sticky Keys is active, or the user inadvertently holds shift).
+        For DUSTrack-shaped workflows, a user pressing what they think
+        is plain ``t`` while Shift is held would get mpl ``'T'``, which
+        wouldn't match the ``'t'`` binding -- silent no-op. To avoid
+        that surprise, single uppercase letters that aren't explicitly
+        bound fall through to the lowercase variant. Explicit uppercase
+        bindings (or multi-character bindings like ``'shift+left'``)
+        take precedence and aren't affected.
+
+        Returns the resolved key string (a key into _keypressdict) or
+        None if no binding matches.
+        """
+        if key in self._keypressdict:
+            return key
+        if isinstance(key, str) and len(key) == 1 and key.isalpha() and key.isupper():
+            lower = key.lower()
+            if lower in self._keypressdict:
+                return lower
+        return None
 
     def cleanup(self):
         """Perform cleanup, for example, when the figure is closed."""

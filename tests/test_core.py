@@ -13,6 +13,74 @@ def test_browser_initialization():
     GenericBrowser(figure_handle=plt.figure())
 
 
+def test_case_insensitive_key_dispatch_fallback():
+    """When mpl emits an uppercase single letter that isn't explicitly bound,
+    dispatch falls back to the lowercase variant. Fixes the Sticky-Keys /
+    Caps Lock / accidental-shift class of "binding fired silently" bugs.
+    """
+    b = GenericBrowser(figure_handle=plt.figure())
+    fired = {"t_lower": 0, "t_upper": 0}
+
+    def on_t():
+        fired["t_lower"] += 1
+
+    def on_T():
+        fired["t_upper"] += 1
+
+    # Only the lowercase is bound; uppercase should fall back to it.
+    b.add_key_binding("t", on_t)
+
+    # Direct match.
+    event = simulate_key_press(b.figure, key="t")
+    b(event)
+    assert fired["t_lower"] == 1, "plain t didn't fire 't' binding"
+
+    # Uppercase (Shift+t or Caps Lock-modified t) falls back.
+    event = simulate_key_press(b.figure, key="T")
+    b(event)
+    assert fired["t_lower"] == 2, "Shift+T didn't fall back to 't' binding"
+
+    # Explicit uppercase binding takes precedence over the fallback.
+    b.add_key_binding("T", on_T)
+    event = simulate_key_press(b.figure, key="T")
+    b(event)
+    assert fired["t_upper"] == 1
+    assert fired["t_lower"] == 2, "lowercase shouldn't fire when 'T' is bound"
+
+    # Lowercase still works independently.
+    event = simulate_key_press(b.figure, key="t")
+    b(event)
+    assert fired["t_lower"] == 3
+    assert fired["t_upper"] == 1
+
+
+def test_case_insensitive_fallback_doesnt_affect_special_keys():
+    """The fallback applies only to single alphabetic letters. shift+left,
+    ctrl+c, etc. are unaffected (they're multi-character keys that mpl
+    emits as-is).
+    """
+    b = GenericBrowser(figure_handle=plt.figure())
+
+    fired_decrement = []
+    fired_decrement_frac = []
+    b._keypressdict["left"] = (lambda: fired_decrement.append(1), "decrement")
+    b._keypressdict["shift+left"] = (
+        lambda: fired_decrement_frac.append(1), "decrement frac"
+    )
+
+    # Pressing 'left' fires 'left' only, not 'shift+left'.
+    event = simulate_key_press(b.figure, key="left")
+    b(event)
+    assert len(fired_decrement) == 1
+    assert len(fired_decrement_frac) == 0
+
+    # Pressing 'shift+left' fires 'shift+left' only.
+    event = simulate_key_press(b.figure, key="shift+left")
+    b(event)
+    assert len(fired_decrement) == 1
+    assert len(fired_decrement_frac) == 1
+
+
 def test_buttons_add_separator_mpl_path():
     """Buttons.add_separator() under Agg adds an invisible spacer button.
 
