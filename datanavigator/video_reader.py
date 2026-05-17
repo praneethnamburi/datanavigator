@@ -11,11 +11,13 @@ codec exercised, where decord diverged on 8/28 frames of a production
 VFR clip — so this swap is a correctness improvement, not just a
 dependency cleanup.
 
-TOC build cost is paid once per video and cached as a sidecar JSON
-(``<video>.dnav-toc.json``) keyed on path + size + mtime + SHA-256 of
-the first/last 64 KiB. Subsequent opens are O(stat) + small read.
-Use :func:`precompute_toc` to batch-warm the cache before an
-annotation session.
+TOC build cost is paid once per video and cached as a sidecar
+(``<video>.dnav-toc``, JSON content) keyed on path + size + mtime +
+SHA-256 of the first/last 64 KiB. Subsequent opens are O(stat) + small
+read. The composite suffix is deliberately *not* ``.json`` to avoid
+collisions with downstream tooling that walks ``*.json`` (DUSTrack
+annotation discovery, ad-hoc notebooks, etc.). Use :func:`precompute_toc`
+to batch-warm the cache before an annotation session.
 """
 from __future__ import annotations
 
@@ -32,7 +34,7 @@ import numpy as np
 from ._vendor.pims_pyav_reader import PyAVReaderIndexed
 
 
-_SIDECAR_SUFFIX = ".dnav-toc.json"
+_SIDECAR_SUFFIX = ".dnav-toc"
 _SIDECAR_SCHEMA_VERSION = 1
 _SHA_PROBE_BYTES = 64 * 1024  # 64 KiB head + 64 KiB tail
 
@@ -40,7 +42,9 @@ _SHA_PROBE_BYTES = 64 * 1024  # 64 KiB head + 64 KiB tail
 # ---------- TOC sidecar cache ----------
 
 def _sidecar_path(video_path: str) -> Path:
-    """Return the sidecar path: ``<video>.dnav-toc.json``."""
+    """Return the sidecar path: ``<video>.dnav-toc`` (JSON content, no .json
+    suffix — keeps the file invisible to ``*.json`` walkers in downstream
+    tooling like DUSTrack annotation discovery)."""
     return Path(str(video_path) + _SIDECAR_SUFFIX)
 
 
@@ -94,6 +98,31 @@ def _load_sidecar(video_path: str, current_key: dict) -> dict | None:
     return toc
 
 
+def _serialize_payload(payload: dict) -> str:
+    """Pretty-print the outer structure but keep the long ``lengths`` /
+    ``ts`` arrays on a single line each — so the ``key`` / ``schema_version``
+    header stays human-readable in any editor while the file size is close
+    to the fully-compact form (≈3× smaller than fully pretty-printed at
+    1800 frames). Implementation: serialize the arrays compactly, slot
+    them into the indented outer dict via unique placeholders that can't
+    appear in the rest of the payload (SHA hex / ints / version int).
+    """
+    lengths_compact = json.dumps([int(x) for x in payload["toc"]["lengths"]])
+    ts_compact = json.dumps([int(x) for x in payload["toc"]["ts"]])
+    outer = {
+        "key": payload["key"],
+        "schema_version": payload["schema_version"],
+        "toc": {
+            "lengths": "__DNAV_TOC_LENGTHS__",
+            "ts": "__DNAV_TOC_TS__",
+        },
+    }
+    text = json.dumps(outer, indent=2, sort_keys=True)
+    text = text.replace('"__DNAV_TOC_LENGTHS__"', lengths_compact)
+    text = text.replace('"__DNAV_TOC_TS__"', ts_compact)
+    return text + "\n"
+
+
 def _save_sidecar(video_path: str, toc: dict, key: dict) -> bool:
     """Atomically write the sidecar. Returns False if the write failed
     (e.g. read-only directory) — not fatal; the caller continues with the
@@ -116,7 +145,7 @@ def _save_sidecar(video_path: str, toc: dict, key: dict) -> bool:
         )
         try:
             with os.fdopen(fd, "w") as f:
-                json.dump(payload, f)
+                f.write(_serialize_payload(payload))
             os.replace(tmp_path, sidecar)
             return True
         except Exception:
@@ -285,11 +314,13 @@ class VideoReader:
     (PyAV honors the source resolution and is CPU-only here).
 
     A frame-index TOC is built from the video at open time and cached
-    next to it as ``<video>.dnav-toc.json`` (keyed on path + size + mtime
-    + head/tail SHA-256). On a cache hit the second open is sub-second;
-    on a miss the first open prints a one-line "building TOC..." notice.
-    Use :func:`precompute_toc` to warm the cache for a set of videos
-    before an interactive session.
+    next to it as ``<video>.dnav-toc`` (JSON content; the ``.json``
+    extension is intentionally omitted so ``*.json`` walkers in
+    downstream tooling don't pick the sidecar up). The key is path +
+    size + mtime + head/tail SHA-256. On a cache hit the second open is
+    sub-second; on a miss the first open prints a one-line "building
+    TOC..." notice. Use :func:`precompute_toc` to warm the cache for a
+    set of videos before an interactive session.
     """
 
     def __init__(

@@ -170,7 +170,7 @@ def fresh_clip(tmp_path) -> Path:
 def test_toc_first_open_builds_and_writes_sidecar(fresh_clip, capsys):
     from datanavigator import VideoReader
 
-    sidecar = Path(str(fresh_clip) + ".dnav-toc.json")
+    sidecar = Path(str(fresh_clip) + ".dnav-toc")
     assert not sidecar.exists()
 
     vr = VideoReader(str(fresh_clip))
@@ -246,7 +246,7 @@ def test_toc_corrupted_sidecar_triggers_rebuild(fresh_clip, capsys):
     VideoReader(str(fresh_clip))
     capsys.readouterr()
 
-    sidecar = Path(str(fresh_clip) + ".dnav-toc.json")
+    sidecar = Path(str(fresh_clip) + ".dnav-toc")
     sidecar.write_text("{not valid json")
 
     VideoReader(str(fresh_clip))
@@ -275,8 +275,8 @@ def test_precompute_toc_batch_warmup(fresh_clip, tmp_path, capsys):
     results = precompute_toc([fresh_clip, alt], show_progress=False)
     assert results[str(fresh_clip)] == "built"
     assert results[str(alt)] == "built"
-    assert Path(str(fresh_clip) + ".dnav-toc.json").exists()
-    assert Path(str(alt) + ".dnav-toc.json").exists()
+    assert Path(str(fresh_clip) + ".dnav-toc").exists()
+    assert Path(str(alt) + ".dnav-toc").exists()
 
     # Second call sees hits
     results2 = precompute_toc([fresh_clip, alt], show_progress=False)
