@@ -199,6 +199,7 @@ def _accepts_event_arg(func) -> bool:
 
 def _make_qt_button_classes():
     """Lazy: build the Qt button wrapper classes (qtpy import deferred)."""
+    from qtpy.QtCore import Qt
     from qtpy.QtWidgets import QPushButton
 
     class _QtPushButton:
@@ -212,6 +213,17 @@ def _make_qt_button_classes():
         def __init__(self, toolbar, name: str, **_kwargs):
             self.name = name
             self._qt_btn = QPushButton(name)
+            # Don't steal keyboard focus when clicked. The matplotlib
+            # canvas owns the keyboard for "hover over plot, press a key"
+            # workflows (mpl key_press_event with .xdata / .ydata
+            # populated from the last cursor position). With Qt's default
+            # StrongFocus on the button, the FIRST click moves focus to
+            # the button, and every subsequent keypress routes there
+            # instead of the canvas -- silently breaking every mpl key
+            # binding the consumer set up via add_key_binding(). NoFocus
+            # keeps mouse clicks working while leaving the canvas's
+            # focus undisturbed.
+            self._qt_btn.setFocusPolicy(Qt.NoFocus)
             toolbar.addWidget(self._qt_btn)
 
         def on_clicked(self, action_func) -> None:
