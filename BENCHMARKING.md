@@ -1,25 +1,52 @@
 # datanavigator -- responsiveness benchmarks
 
 Per-frame `browser.update()` wall-time stats, tracked across releases.
-The harness is [`tests/qt_learning/08_benchmark.py`](tests/qt_learning/08_benchmark.py).
+Two harnesses:
+
+- [`tests/qt_learning/08_benchmark.py`](tests/qt_learning/08_benchmark.py)
+  -- **synthetic** DUSTrack-shaped widget load on top of one `imshow`.
+  Isolates the widget-rendering cost we touched in 1.4.0.
+- [`tests/qt_learning/09_benchmark_dustrack.py`](tests/qt_learning/09_benchmark_dustrack.py)
+  -- **real DUSTrack UI** via DLCProject on the interosseous_pn24-x
+  video; the whole stack (video decode + annotation traces + signal
+  subplots + widgets). Closer to user-felt responsiveness.
 
 ## Summary
 
-The synthetic-frame harness mimics DUSTrack-shaped visual complexity:
-one `imshow` + memoryslot display + 2 state variables + 8 buttons.
-200 frames, 10 warmup discarded. Run on b4 conda env (PyQt5 5.15.2,
-matplotlib 3.7.3, Windows 11), 3 runs averaged.
+### Synthetic (b4 env, PyQt5 5.15.2, matplotlib 3.7.3, 3 runs averaged)
 
-| Release / Branch       | Median ms | Mean ms | p95 ms | fps (median) | Speedup vs baseline |
-|------------------------|-----------|---------|--------|--------------|---------------------|
-| 1.3.0 (master)         | 28.5      | 29.1    | 34.0   | 35.1         | 1.00x (baseline)    |
-| 1.4.0-qt               | 15.5      | 16.1    | 19.4   | 64.5         | **1.84x**           |
+| Release / Branch       | Median ms | Mean ms | p95 ms | fps (median) | Speedup |
+|------------------------|-----------|---------|--------|--------------|---------|
+| 1.3.0 (master)         | 28.5      | 29.1    | 34.0   | 35.1         | 1.00x   |
+| 1.4.0-qt               | 15.5      | 16.1    | 19.4   | 64.5         | **1.84x** |
 
-Source of the 1.4.0 win: Phase 2 (TextView -> QLabel overlay) and
-Phase 3 (Buttons -> QPushButton in QToolBar) moved every persistent
-non-plot widget *off* the matplotlib canvas. The per-frame canvas
-raster only includes the actual plot (the imshow) now, not the ~11
-widget axes that previously lived inside the figure.
+### Real DUSTrack UI (dlc env, PySide6 6.4.2, matplotlib 3.8.4, interosseous_pn24-x video)
+
+| Release / Branches              | Median ms | Mean ms | p95 ms | fps (median) | Speedup |
+|---------------------------------|-----------|---------|--------|--------------|---------|
+| 1.3.0 (datanavigator+dustrack)  | 141.6     | 141.7   | 144.1  | 7.1          | 1.00x   |
+| 1.4.0-qt (both)                 | 128.6     | 128.8   | 130.8  | 7.8          | **1.10x** |
+
+### How to read the gap between the two
+
+The synthetic harness's ~13 ms gap (28.5 -> 15.5) and the real DUSTrack
+harness's ~13 ms gap (141.6 -> 128.6) are essentially the same absolute
+saving. Both come from the same Phase 2 + Phase 3 change: every
+persistent non-plot widget (memoryslot display, state variables,
+buttons) moved off the matplotlib canvas and into native Qt widgets
+that don't participate in the per-frame raster.
+
+In real DUSTrack the ~13 ms is a smaller fraction of the total update
+cost because each frame also costs: video decode, ~7 annotation
+Line2D updates, 2-3 signal subplots, title relayout. None of those
+were touched in 1.4.0. So real-world speedup is ~10% / +0.7 fps,
+not the 1.84x the synthetic shows in isolation. Held-down arrow
+scrubbing will feel marginally smoother, not transformatively so.
+
+Further wins on real DUSTrack would require touching the actual plot
+update path: blit-mode rendering for the imshow + annotation traces,
+or video-frame pre-decoding. Out of 1.4.0 scope; tracked as a
+post-1.4.0 perf-sweep candidate.
 
 ## Methodology
 
@@ -109,3 +136,36 @@ Summary table above.
 | min | median | mean | p95 | p99 | max | fps (median) |
 |---|---|---|---|---|---|---|
 | 14.88 | 15.57 | 15.79 | 17.40 | 21.95 | 22.14 | 64.2 |
+
+### DUSTrack UI -- 1.4.0-qt -- 2026-05-17 10:51:35
+
+- datanavigator: `1.4.0-qt@fc1b6f3-dirty` source `C:\dev\datanavigator\datanavigator\__init__.py`
+- dustrack: `1.4.0-qt@9ba5e7f` source `C:\dev\DUSTrack\dustrack\__init__.py`
+- backend: QtAgg, qt_api=pyside6, qt_plat=default
+- N=90 (10 warmup discarded)
+
+| min | median | mean | p95 | p99 | max | fps (median) |
+|---|---|---|---|---|---|---|
+| 126.82 | 128.59 | 128.80 | 130.77 | 134.75 | 134.75 | 7.8 |
+
+### DUSTrack UI -- 1.3.0 baseline (master) -- 2026-05-17 10:52:37
+
+- datanavigator: `master@b71761d-dirty` source `C:\dev\datanavigator\datanavigator\__init__.py`
+- dustrack: `main@dc0cff3` source `C:\dev\DUSTrack\dustrack\__init__.py`
+- backend: QtAgg, qt_api=pyside6, qt_plat=default
+- N=90 (10 warmup discarded)
+
+| min | median | mean | p95 | p99 | max | fps (median) |
+|---|---|---|---|---|---|---|
+| 139.34 | 141.28 | 141.51 | 144.03 | 147.08 | 147.08 | 7.1 |
+
+### DUSTrack UI -- 1.3.0 baseline (master) run2 -- 2026-05-17 10:53:23
+
+- datanavigator: `master@b71761d-dirty` source `C:\dev\datanavigator\datanavigator\__init__.py`
+- dustrack: `main@dc0cff3` source `C:\dev\DUSTrack\dustrack\__init__.py`
+- backend: QtAgg, qt_api=pyside6, qt_plat=default
+- N=90 (10 warmup discarded)
+
+| min | median | mean | p95 | p99 | max | fps (median) |
+|---|---|---|---|---|---|---|
+| 140.15 | 141.83 | 141.98 | 144.10 | 146.46 | 146.46 | 7.1 |
