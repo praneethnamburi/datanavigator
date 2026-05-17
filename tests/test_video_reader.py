@@ -252,9 +252,112 @@ def test_toc_corrupted_sidecar_triggers_rebuild(fresh_clip, capsys):
     VideoReader(str(fresh_clip))
     captured = capsys.readouterr()
     assert "building TOC" in captured.out
-    # Sidecar should be replaced with valid JSON
+    # Sidecar should be replaced with valid JSON at the current schema version
     import json as _json
-    assert _json.loads(sidecar.read_text())["schema_version"] == 1
+    from datanavigator.video_reader import _SIDECAR_SCHEMA_VERSION
+    assert _json.loads(sidecar.read_text())["schema_version"] == _SIDECAR_SCHEMA_VERSION
+
+
+def test_get_frame_timestamp_shape_and_monotonicity(fresh_clip, capsys):
+    """decord parity: (N, 2) array of [start, end] in seconds, monotonic."""
+    from datanavigator import VideoReader
+
+    vr = VideoReader(str(fresh_clip))
+    capsys.readouterr()  # drain "building TOC..." from first open
+    ts = vr.get_frame_timestamp(range(len(vr)))
+
+    assert ts.shape == (N_FRAMES, 2)
+    assert ts.dtype == np.float64
+    # First frame starts at 0; ends ~= 1/fps
+    assert ts[0, 0] == pytest.approx(0.0, abs=1e-6)
+    assert ts[0, 1] > 0
+    # Monotonic non-decreasing start times
+    assert np.all(np.diff(ts[:, 0]) >= 0)
+    # Last frame's end time is close to clip duration (1.0s)
+    assert ts[-1, 1] == pytest.approx(DURATION_S, abs=0.1)
+
+
+def test_get_frame_timestamp_centroid_matches_tobii_pattern(fresh_clip, capsys):
+    """Pin tobii.py:243's `.get_frame_timestamp(range(len(vr))).mean(-1)`
+    usage: centroids should be monotonic and roughly evenly spaced for CFR."""
+    from datanavigator import VideoReader
+
+    vr = VideoReader(str(fresh_clip))
+    capsys.readouterr()
+    centroids = vr.get_frame_timestamp(range(len(vr))).mean(-1)
+
+    assert centroids.shape == (N_FRAMES,)
+    assert np.all(np.diff(centroids) > 0)
+    # CFR clip: deltas should cluster tightly around 1/fps.
+    deltas = np.diff(centroids)
+    assert deltas.std() < (1.0 / FPS) * 0.5
+
+
+def test_v2_sidecar_persists_timestamps(fresh_clip, capsys):
+    """First open builds v2 sidecar; second open hits cache and the
+    timestamps come straight from disk (no rebuild announcement)."""
+    from datanavigator import VideoReader
+    import json as _json
+
+    VideoReader(str(fresh_clip))  # warm
+    capsys.readouterr()
+
+    sidecar = Path(str(fresh_clip) + ".dnav-toc")
+    data = _json.loads(sidecar.read_text())
+    assert data["schema_version"] == 2
+    assert "timestamps" in data
+    assert "frame_pts" in data["timestamps"]
+    assert "frame_durations" in data["timestamps"]
+    assert len(data["timestamps"]["frame_pts"]) == N_FRAMES
+    assert "time_base" in data
+    assert {"num", "den"}.issubset(data["time_base"])
+
+    vr2 = VideoReader(str(fresh_clip))
+    captured = capsys.readouterr()
+    assert "building TOC" not in captured.out
+    assert "indexing frame timestamps" not in captured.out
+    # And get_frame_timestamp works without triggering a build
+    ts = vr2.get_frame_timestamp([0, 5, 10])
+    assert ts.shape == (3, 2)
+    captured = capsys.readouterr()
+    assert "indexing frame timestamps" not in captured.out
+
+
+def test_v1_sidecar_lazy_upgrades_on_get_frame_timestamp(fresh_clip, capsys):
+    """v1 sidecar (legacy) keeps video reading working; first
+    get_frame_timestamp() call lazily builds + upgrades the sidecar to v2."""
+    from datanavigator import VideoReader
+    from datanavigator import video_reader as _vr
+    import json as _json
+
+    # Build a v1 sidecar by hand using the current key.
+    key = _vr._cache_key(str(fresh_clip))
+    # Borrow the eager build to get a valid TOC, then re-write as v1.
+    toc, _ts, _tb = _vr._build_toc_and_timestamps(str(fresh_clip))
+    sidecar = Path(str(fresh_clip) + ".dnav-toc")
+    sidecar.write_text(_json.dumps({
+        "schema_version": 1,
+        "key": key,
+        "toc": {"lengths": toc["lengths"], "ts": toc["ts"]},
+    }))
+
+    # Opening reads v1 silently (no "building" line).
+    vr = VideoReader(str(fresh_clip))
+    captured = capsys.readouterr()
+    assert "building TOC" not in captured.out
+    assert "indexing frame timestamps" not in captured.out
+    assert len(vr) == N_FRAMES
+
+    # First get_frame_timestamp triggers the lazy build + sidecar upgrade.
+    ts = vr.get_frame_timestamp(range(len(vr)))
+    captured = capsys.readouterr()
+    assert "indexing frame timestamps" in captured.out
+    assert ts.shape == (N_FRAMES, 2)
+
+    # Sidecar is now v2 with timestamps.
+    data = _json.loads(sidecar.read_text())
+    assert data["schema_version"] == 2
+    assert len(data["timestamps"]["frame_pts"]) == N_FRAMES
 
 
 def test_precompute_toc_batch_warmup(fresh_clip, tmp_path, capsys):
