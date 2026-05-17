@@ -29,22 +29,43 @@ from .core import GenericBrowser
 def _pick_vcodec() -> str:
     """Return a usable H.264 encoder name for the local ffmpeg install.
 
-    Prefers ``h264_nvenc`` (NVIDIA hardware) when ffmpeg reports it as
-    available; otherwise falls back to ``libx264`` (software). Cached after
-    the first call. The previous releases hardcoded ``h264_nvenc``, which
-    fails on CPU-only hosts (CI runners, machines without NVIDIA drivers)
-    with ``Unknown encoder 'h264_nvenc'`` or ``Cannot load nvcuda.dll``.
+    Prefers ``h264_nvenc`` (NVIDIA hardware) when an actual encode
+    succeeds; otherwise falls back to ``libx264`` (software). Cached
+    after the first call.
+
+    Detection is done by running a tiny ``h264_nvenc`` encode of a 256x256
+    solid-color frame to a null sink. ``ffmpeg -encoders`` is insufficient:
+    builds compiled with ``--enable-nvenc`` (e.g. the gyan.dev / Chocolatey
+    Windows binaries) list ``h264_nvenc`` even when the runtime
+    ``nvcuda.dll`` / NVIDIA driver isn't present, which is exactly the
+    state of GitHub Actions Windows runners. The 256x256 size clears
+    NVENC's minimum-dimension constraint (~144x144) so the probe only
+    fails for real reasons (no driver, no GPU).
     """
     try:
         result = subprocess.run(
-            ["ffmpeg", "-hide_banner", "-encoders"],
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=black:size=256x256:rate=1:duration=0.1",
+                "-c:v",
+                "h264_nvenc",
+                "-f",
+                "null",
+                "-",
+            ],
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=15,
         )
     except (OSError, subprocess.SubprocessError):
         return "libx264"
-    if "h264_nvenc" in (result.stdout or ""):
+    if result.returncode == 0:
         return "h264_nvenc"
     return "libx264"
 
