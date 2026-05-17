@@ -43,10 +43,20 @@ were touched in 1.4.0. So real-world speedup is ~10% / +0.7 fps,
 not the 1.84x the synthetic shows in isolation. Held-down arrow
 scrubbing will feel marginally smoother, not transformatively so.
 
-Further wins on real DUSTrack would require touching the actual plot
-update path: blit-mode rendering for the imshow + annotation traces,
-or video-frame pre-decoding. Out of 1.4.0 scope; tracked as a
-post-1.4.0 perf-sweep candidate.
+Further wins on real DUSTrack require touching the actual plot update
+path. Two candidates, in expected-impact order, tracked in
+[`TODO.md`](TODO.md) for follow-up in 1.4.0 (which is themed around
+performance — the items below stay in scope):
+
+1. **Blit-mode rendering** for the imshow + ~7 annotation Line2D
+   traces. matplotlib's `canvas.copy_from_bbox` / `restore_region` /
+   `ax.draw_artist` re-rasters only the artists that changed, skipping
+   axes / titles / signal subplots when they didn't. Estimated saving:
+   tens of ms per frame on real DUSTrack.
+2. **Video-frame pre-decoding / lookahead** in `video_reader.py`. For
+   forward scrubbing, decode frames N+1..N+k in a worker thread while
+   user is on frame N. PyAV decode disappears from the timing path
+   on cache hit. Estimated saving: another ~30-50 ms.
 
 ## Methodology
 
