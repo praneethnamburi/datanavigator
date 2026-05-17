@@ -365,9 +365,6 @@ class VideoPlotBrowser(GenericBrowser):
         Returns:
             Path to the saved video file.
         """
-        import shutil
-        import subprocess
-
         if start_frame is None:
             start_frame = self.memoryslots._list["1"]
         if end_frame is None:
@@ -392,16 +389,42 @@ class VideoPlotBrowser(GenericBrowser):
 
         print("Creating video from image sequence...")
         vcodec = _pick_vcodec()
-        cmd = (
-            f'cd "{sav_dir}" && ffmpeg -framerate {self.fps} '
-            f'-start_number {start_frame} -i %08d.png -c:v {vcodec} '
-            f'-b:v 10M -maxrate 12M -bufsize 24M -vf scale="-1:1080" '
-            f'-an "{sav_dir}.mp4"'
+        # Run ffmpeg with `cwd=sav_dir` rather than chaining `cd "{sav_dir}"
+        # && ffmpeg`. On Windows, cmd.exe's `cd` does NOT change drives
+        # without `/D`, so when the workflow runs from D:\ and the clip
+        # folder is on C:\ (the default for pytest's tmp_path), the `cd`
+        # silently no-ops and ffmpeg can't find the %08d.png inputs.
+        out_path = f"{sav_dir}.mp4"
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-framerate",
+                str(self.fps),
+                "-start_number",
+                str(start_frame),
+                "-i",
+                "%08d.png",
+                "-c:v",
+                vcodec,
+                "-b:v",
+                "10M",
+                "-maxrate",
+                "12M",
+                "-bufsize",
+                "24M",
+                "-vf",
+                "scale=-1:1080",
+                "-an",
+                out_path,
+            ],
+            cwd=sav_dir,
+            check=False,
+            capture_output=True,
         )
-        subprocess.getoutput(cmd)
 
         print("Removing temporary folder...")
         shutil.rmtree(sav_dir)
 
         print("Done")
-        return f"{sav_dir}.mp4"
+        return out_path
