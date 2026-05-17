@@ -74,9 +74,25 @@ def test_TextView():
     tv = TextView(text)
     assert tv.text == text
     assert tv._pos == (0, 0, "bottom", "left")
+    # Soft Qt mode: under Agg the mpl artist is created, the Qt overlay isn't.
+    assert tv._overlay is None
+    assert tv._text is not None
     plt.close(tv.figure)
     tv = TextView({1: "line1", 2: "line2"}, pos="top right")
     assert tv.text == ["1 - line1", "2 - line2"]
+    assert tv._overlay is None
+    plt.close(tv.figure)
+
+
+def test_TextView_update_swap_on_agg():
+    """Calling .update with new text swaps the mpl artist on the Agg path."""
+    tv = TextView(["a"])
+    first_artist = tv._text
+    tv.update(["b", "c"])
+    assert tv.text == ["b", "c"]
+    # The Text artist is recreated on each update (the old one is .remove()d).
+    assert tv._text is not first_artist
+    plt.close(tv.figure)
 
 
 def test_get_palette():

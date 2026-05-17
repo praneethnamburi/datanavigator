@@ -286,7 +286,10 @@ class MemorySlots(AssetContainer):
     def hide(self) -> None:
         """Hide the memory slot text."""
         if self._memtext is not None:
-            self._memtext._text.remove()
+            if self._memtext._overlay is not None:
+                self._memtext._overlay.hide()
+            elif self._memtext._text is not None:
+                self._memtext._text.remove()
         self._memtext = None
 
     def is_enabled(self) -> bool:

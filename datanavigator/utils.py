@@ -176,7 +176,18 @@ def _parse_pos(
 
 
 class TextView:
-    """Show text array line by line."""
+    """Show text array line by line.
+
+    Phase 2 of the 1.4.0 Qt refactor (soft mode): when ``fax`` resolves to
+    a figure whose canvas is a matplotlib Qt canvas, the text renders as a
+    native QLabel overlay parented to the canvas (``self._overlay`` set,
+    ``self._text`` stays None). On every other backend the original
+    ``Axes.text`` path runs unchanged (``self._overlay`` is None,
+    ``self._text`` is the mpl Text artist).
+
+    The public surface (``__init__`` signature, ``.text``, ``.update``)
+    is identical across both paths.
+    """
 
     def __init__(
         self,
@@ -195,13 +206,20 @@ class TextView:
             return (1 - 2 * margin) * xy + margin
 
         self.text = self.parse_text(text)
-        self._text = None  # matplotlib text object
+        self._text = None  # matplotlib Text artist (set only on the mpl path)
+        self._overlay = None  # QtTextOverlay (set only on the Qt path)
         self._pos = _parse_pos(pos)
         self.figure, self._ax = _parse_fax(
             fax, ax_pos=(rescale(self._pos[0]), rescale(self._pos[1]), 0.02, 0.02)
         )
-        self.setup()
-        self.update()
+
+        # Try the Qt path first. ``make_text_overlay`` returns None for
+        # non-Qt canvases without importing qtpy, so this is safe on Agg.
+        from ._qt import make_text_overlay
+        self._overlay = make_text_overlay(self.figure, self._pos, self.text)
+        if self._overlay is None:
+            self.setup()
+            self.update()
 
     def parse_text(self, text: Union[List[str], dict]) -> List[str]:
         """Parse text input into a list of strings.
@@ -229,6 +247,9 @@ class TextView:
         """
         if new_text is not None:
             self.text = self.parse_text(new_text)
+        if self._overlay is not None:
+            self._overlay.update(self.text)
+            return
         if self._text is not None:
             self._text.remove()
         x, y, va, ha = self._pos
