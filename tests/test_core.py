@@ -13,6 +13,25 @@ def test_browser_initialization():
     GenericBrowser(figure_handle=plt.figure())
 
 
+def test_buttons_use_mpl_path_under_agg():
+    """Soft Qt mode: under Agg, Buttons.add returns mpl widgets, not Qt wrappers.
+
+    The Qt-path classes are named _QtPushButton / _QtToggleButton (private)
+    and only appear when the parent's figure is on a Qt canvas. Under the
+    Agg backend the test suite uses, the returned objects are the public
+    mpl-inheriting Button / ToggleButton from assets.py.
+    """
+    from datanavigator.assets import Button, ToggleButton
+    assert mpl.get_backend().lower() == "agg"
+    b = GenericBrowser(figure_handle=plt.figure())
+    push = b.buttons.add(text="push")
+    toggle = b.buttons.add(text="toggle", type_="Toggle")
+    assert isinstance(push, Button)
+    assert isinstance(toggle, ToggleButton)
+    assert not type(push).__name__.startswith("_Qt")
+    assert not type(toggle).__name__.startswith("_Qt")
+
+
 def test_qt_window_is_none_under_agg():
     """Soft Qt mode: on the Agg backend the test suite uses, _qt_window is None.
 

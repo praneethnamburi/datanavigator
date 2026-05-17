@@ -179,7 +179,16 @@ class AssetContainer:
 
 
 class Buttons(AssetContainer):
-    """Manager for buttons in a matplotlib figure or GUI (see GenericBrowser for example)."""
+    """Manager for buttons in a matplotlib figure or GUI (see GenericBrowser for example).
+
+    Phase 3 of the 1.4.0 Qt refactor (soft mode): when the parent's figure
+    is on a Qt canvas AND no explicit ``pos`` is given, ``add()`` builds a
+    native QPushButton in a QToolBar attached to the QMainWindow. On every
+    other backend, or when an explicit ``pos`` is given, the original
+    matplotlib-widgets path runs unchanged. The returned object exposes
+    the same public surface either way (``name``, ``on_clicked``, plus
+    toggle-specific ``state`` / ``toggle`` / ``set_text`` / ``set_state``).
+    """
 
     def add(
         self,
@@ -198,25 +207,43 @@ class Buttons(AssetContainer):
         If pos is provided, then w, h, and buf will be ignored.
         """
         assert type_ in ("Push", "Toggle")
-        nbtn = len(self)
-        if pos is None:  # start adding at the top left corner
-            parent_fig = self.parent.figure
-            mul_factor = 6.4 / parent_fig.get_size_inches()[0]
 
-            btn_w = w * mul_factor
-            btn_h = h * mul_factor
-            btn_buf = buf
-            pos = (
-                btn_buf,
-                (1 - btn_buf) - ((btn_buf + btn_h) * (nbtn + 1)),
-                btn_w,
-                btn_h,
+        # Try the Qt path first. parent.figure works for both
+        # GenericBrowser-shaped parents and Figure-as-parent (examples.py).
+        # We only Qt-ify the default-position case; an explicit pos is a
+        # request for mpl-style placement, which we can't replicate in a
+        # QToolBar without surprises.
+        b = None
+        if pos is None:
+            from ._qt import make_qt_button
+            parent_fig = self.parent.figure
+            start_state = kwargs.get("start_state", True if type_ == "Toggle" else None)
+            b = make_qt_button(
+                parent_fig, text, type_=type_,
+                start_state=bool(start_state) if start_state is not None else True,
             )
 
-        if type_ == "Toggle":
-            b = ToggleButton(plt.axes(pos), text, **kwargs)
-        else:
-            b = Button(plt.axes(pos), text, **kwargs)
+        if b is None:
+            # mpl fallback (the pre-1.4 path).
+            nbtn = len(self)
+            if pos is None:  # start adding at the top left corner
+                parent_fig = self.parent.figure
+                mul_factor = 6.4 / parent_fig.get_size_inches()[0]
+
+                btn_w = w * mul_factor
+                btn_h = h * mul_factor
+                btn_buf = buf
+                pos = (
+                    btn_buf,
+                    (1 - btn_buf) - ((btn_buf + btn_h) * (nbtn + 1)),
+                    btn_w,
+                    btn_h,
+                )
+
+            if type_ == "Toggle":
+                b = ToggleButton(plt.axes(pos), text, **kwargs)
+            else:
+                b = Button(plt.axes(pos), text, **kwargs)
 
         if action_func is not None:  # more than one can be attached
             if isinstance(action_func, (list, tuple)):

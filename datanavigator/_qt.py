@@ -9,8 +9,10 @@ falls back to its pre-1.4 matplotlib-native rendering.
 
 Phase 1 contributes :func:`find_qt_window`; Phase 2 adds
 :class:`QtTextOverlay` (a QLabel parented to the matplotlib canvas,
-used by :class:`utils.TextView` when running under QtAgg). Phase 3+ will
-add the QPushButton-backed Buttons replacement.
+used by :class:`utils.TextView` when running under QtAgg). Phase 3
+adds :func:`make_qt_button` -- a QPushButton-in-QToolBar replacement
+for the matplotlib-widgets-based Button stack used by
+:class:`assets.Buttons`.
 """
 
 from __future__ import annotations
@@ -162,3 +164,144 @@ def make_text_overlay(figure, pos: Tuple[float, float, str, str],
     except ImportError:
         return None
     return cls(canvas, pos, text_lines)
+
+
+# ---------------------------------------------------------------------------
+# Phase 3 -- Qt buttons in a QToolBar attached to the QMainWindow.
+# ---------------------------------------------------------------------------
+
+
+def _accepts_event_arg(func) -> bool:
+    """True if ``func`` can be called with one positional argument.
+
+    Today's :class:`matplotlib.widgets.Button` passes a ``MouseEvent`` to
+    every registered callback. Qt's ``QPushButton.clicked`` signal emits
+    a bool. To preserve "transition unnoticeable to consumers", we look
+    at ``func``'s signature: if it can take one positional, we pass
+    ``None`` (mpl-style event-like, all known datanavigator callbacks
+    only ever use ``event=None`` defaults or ignore it). If it can't,
+    we call it with no args (``lambda: None`` shape, used in tests).
+    """
+    import inspect
+    try:
+        sig = inspect.signature(func)
+    except (TypeError, ValueError):
+        # Some C-implemented callables don't expose a signature; assume
+        # they accept an event (mpl-compatible default).
+        return True
+    for p in sig.parameters.values():
+        if p.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                      inspect.Parameter.POSITIONAL_ONLY,
+                      inspect.Parameter.VAR_POSITIONAL):
+            return True
+    return False
+
+
+def _make_qt_button_classes():
+    """Lazy: build the Qt button wrapper classes (qtpy import deferred)."""
+    from qtpy.QtWidgets import QPushButton
+
+    class _QtPushButton:
+        """Public-API match for :class:`assets.Button` (mpl path).
+
+        Attributes:
+            name: button label / identity (used by AssetContainer.__getitem__).
+            _qt_btn: the underlying QPushButton (Phase 3+ internals).
+        """
+
+        def __init__(self, toolbar, name: str, **_kwargs):
+            self.name = name
+            self._qt_btn = QPushButton(name)
+            toolbar.addWidget(self._qt_btn)
+
+        def on_clicked(self, action_func) -> None:
+            """Register a callback. See module-level :func:`_accepts_event_arg`."""
+            takes_event = _accepts_event_arg(action_func)
+
+            def slot(*_args):
+                if takes_event:
+                    action_func(None)
+                else:
+                    action_func()
+
+            self._qt_btn.clicked.connect(slot)
+
+    class _QtToggleButton(_QtPushButton):
+        """Public-API match for :class:`assets.ToggleButton` (mpl path)."""
+
+        def __init__(self, toolbar, name: str, start_state: bool = True, **_kwargs):
+            super().__init__(toolbar, name)
+            self._qt_btn.setCheckable(True)
+            self._state = bool(start_state)
+            self._qt_btn.setChecked(self._state)
+            # User clicks -> Qt toggles -> our state -> label refresh
+            self._qt_btn.toggled.connect(self._on_toggled)
+            self.set_text()
+
+        @property
+        def state(self) -> bool:
+            return self._state
+
+        @state.setter
+        def state(self, value: bool) -> None:
+            self._state = bool(value)
+            # blockSignals avoids re-entering _on_toggled while we mutate
+            self._qt_btn.blockSignals(True)
+            self._qt_btn.setChecked(self._state)
+            self._qt_btn.blockSignals(False)
+            self.set_text()
+
+        def _on_toggled(self, checked: bool) -> None:
+            self._state = bool(checked)
+            self.set_text()
+
+        def set_text(self) -> None:
+            self._qt_btn.setText(f"{self.name}={self._state}")
+
+        def toggle(self, event=None) -> None:  # event kept for mpl parity
+            self.state = not self._state
+
+        def set_state(self, state: bool) -> None:
+            assert isinstance(state, bool)
+            self.state = state
+
+    return _QtPushButton, _QtToggleButton
+
+
+def _get_buttons_toolbar(qt_window):
+    """Return the cached QToolBar for datanavigator buttons on ``qt_window``.
+
+    First call attaches a new QToolBar to the left side of the window and
+    caches it under ``qt_window._dnav_buttons_toolbar``. Subsequent calls
+    reuse it so all Buttons.add() calls land in the same toolbar.
+    """
+    tb = getattr(qt_window, "_dnav_buttons_toolbar", None)
+    if tb is None:
+        from qtpy.QtCore import Qt
+        from qtpy.QtWidgets import QToolBar
+        tb = QToolBar("datanavigator", qt_window)
+        qt_window.addToolBar(Qt.LeftToolBarArea, tb)
+        qt_window._dnav_buttons_toolbar = tb
+    return tb
+
+
+def make_qt_button(figure, name: str, type_: str = "Push", start_state: bool = True):
+    """Build a Qt-backed Button or ToggleButton if ``figure`` is on a Qt canvas.
+
+    Returns ``None`` if no Qt window is found (caller falls back to mpl).
+    On the Qt path, returns an object with the same public surface as
+    :class:`assets.Button` / :class:`assets.ToggleButton` (``name``,
+    ``on_clicked``, and for toggles ``state`` / ``toggle`` / ``set_state``
+    / ``set_text``).
+    """
+    qt_window = find_qt_window(figure)
+    if qt_window is None:
+        return None
+    try:
+        push_cls, toggle_cls = _make_qt_button_classes()
+    except ImportError:
+        return None
+    tb = _get_buttons_toolbar(qt_window)
+    if type_ == "Toggle":
+        return toggle_cls(tb, name, start_state=start_state)
+    return push_cls(tb, name)
