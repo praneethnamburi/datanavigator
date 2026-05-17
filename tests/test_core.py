@@ -54,6 +54,37 @@ def test_case_insensitive_key_dispatch_fallback():
     assert fired["t_upper"] == 1
 
 
+def test_shift_letter_is_uppercase_not_prefixed():
+    """matplotlib reports shift+<letter> as the uppercase letter, NOT as
+    'shift+t'. shift+<arrow> is reported with the 'shift+' prefix. The
+    Phase 4i guard preserves both conventions: independent t / T
+    bindings work as expected for shift+letter; shift+arrow bindings
+    work via direct match on their literal string.
+
+    This test documents the contract for anyone wondering "how do I bind
+    shift+t to a different action than t?": bind 'T', not 'shift+t'.
+    """
+    b = GenericBrowser(figure_handle=plt.figure())
+    log = []
+    b.add_key_binding("t", lambda: log.append("t"))
+    b.add_key_binding("T", lambda: log.append("T"))
+    b.add_key_binding("shift+left", lambda: log.append("shift+left"))
+    b.add_key_binding("left", lambda: log.append("left"))
+
+    # Pressing plain t fires 't'.
+    b(simulate_key_press(b.figure, key="t"))
+    # Pressing Shift+t (mpl emits 'T') fires 'T', NOT fallback to 't'.
+    b(simulate_key_press(b.figure, key="T"))
+    # Pressing Shift+left (mpl emits 'shift+left') fires 'shift+left'.
+    b(simulate_key_press(b.figure, key="shift+left"))
+    # Pressing plain left fires 'left'.
+    b(simulate_key_press(b.figure, key="left"))
+
+    assert log == ["t", "T", "shift+left", "left"], (
+        f"expected ['t', 'T', 'shift+left', 'left'], got {log}"
+    )
+
+
 def test_case_insensitive_fallback_doesnt_affect_special_keys():
     """The fallback applies only to single alphabetic letters. shift+left,
     ctrl+c, etc. are unaffected (they're multi-character keys that mpl

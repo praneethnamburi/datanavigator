@@ -46,6 +46,23 @@ Assetcontainers
 import os
 import sys
 import shutil
+import warnings
+
+# Suppress PySide6 6.4.x shibokensupport signature parser warnings.
+# These fire when something (matplotlib's NavigationToolbar2QT save path,
+# DLC's GUI imports, etc.) causes shiboken to lazy-parse QFileDialog's
+# API signatures. PySide6 6.4.x's parser doesn't recognize certain
+# forward-referenced types (typing.List[PySide6.QtCore.QUrl], nested
+# QFileDialog.Option enums); each unparseable line emits a RuntimeWarning.
+# Fixed upstream in PySide6 6.5+; DLC envs commonly pin 6.4.2 so users
+# see dozens of these on first DUSTrack launch. Cosmetic only -- the Qt
+# API still works fine, just signature introspection is incomplete.
+# Narrow module filter so any non-shiboken RuntimeWarning still surfaces.
+warnings.filterwarnings(
+    "ignore",
+    category=RuntimeWarning,
+    module=r"shibokensupport\.signature\.parser",
+)
 
 from .__version__ import __version__
 

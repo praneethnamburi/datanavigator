@@ -49,6 +49,18 @@ touched. Ordered by expected impact:
   real DUSTrack (depending on codec). Concurrency to think about
   carefully; share with the PyAV TOC cache shape from 1.3.0.
 
+### Unresolved -- low priority
+
+- **PyQt6 vs PySide6 perceived hover+key inversion.** During Phase 4f-i
+  investigation, user reported "hover + t works in dustrack1a1 (PyQt6
+  binding) but not in dlc (PySide6 binding)" with Caps Lock confirmed
+  off in both. But probe 20 (tests/qt_learning/20_raw_qt_vs_mpl_key.py)
+  showed byte-identical raw Qt event sequences in both envs. Phase 4i's
+  case-insensitive single-letter fallback in
+  GenericBrowser._resolve_keypress masks any user-facing symptom, but
+  the underlying perceived inversion has no data-supported explanation.
+  Filed for completeness; reopen if it resurfaces with new evidence.
+
 ### Smaller wins (worth knowing about, defer if time-bound)
 
 - **Cache last QLabel size in `QtTextOverlay._reposition`.** Skip the
