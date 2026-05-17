@@ -188,6 +188,15 @@ class Buttons(AssetContainer):
     matplotlib-widgets path runs unchanged. The returned object exposes
     the same public surface either way (``name``, ``on_clicked``, plus
     toggle-specific ``state`` / ``toggle`` / ``set_text`` / ``set_state``).
+
+    Lifecycle gotcha: ``Buttons.add()`` reads the figure's canvas at call
+    time. If a Figure subclass adds buttons inside its own ``__init__``
+    (as in :class:`datanavigator.examples.ButtonDemo`), this runs *before*
+    matplotlib attaches a Qt canvas to the figure, so those buttons end
+    up on the mpl path even under QtAgg. The buttons still function;
+    they just miss the Phase 3 perf win. Browsers that take a
+    figure_handle (the common case) are unaffected, because the figure
+    is fully constructed before any button is added.
     """
 
     def add(
@@ -253,6 +262,49 @@ class Buttons(AssetContainer):
                 b.on_clicked(action_func)
 
         return super().add(b)
+
+    def add_separator(self, name: Optional[str] = None) -> None:
+        """Add a visual group boundary between buttons.
+
+        On the Qt path (figure on a Qt canvas), inserts a
+        ``QToolBar.addSeparator()`` -- a thin line marking a group
+        boundary. On the mpl path, inserts an invisible button that
+        occupies a layout slot so subsequent buttons are pushed down.
+
+        Promoted to a first-class API for downstream consumers (DUSTrack)
+        that previously hand-rolled invisible spacers by mutating
+        :class:`matplotlib.widgets.Button` internals (``.ax``, ``.label``,
+        ``.ax.patch``) -- internals that don't exist on the Qt path.
+
+        Args:
+            name: Internal name for the mpl-path spacer slot;
+                auto-generated if None. Ignored on the Qt path
+                (toolbar separators are nameless in Qt).
+        """
+        from ._qt import add_qt_separator
+        if add_qt_separator(self.parent.figure):
+            return  # Qt path -- toolbar manages the slot itself
+
+        # mpl fallback: invisible button at the next vertical slot.
+        if name is None:
+            name = f"__separator_{len(self)}"
+        nbtn = len(self)
+        parent_fig = self.parent.figure
+        mul_factor = 6.4 / parent_fig.get_size_inches()[0]
+        btn_w = 0.25 * mul_factor
+        btn_h = 0.05 * mul_factor
+        btn_buf = 0.01
+        pos = (
+            btn_buf,
+            (1 - btn_buf) - ((btn_buf + btn_h) * (nbtn + 1)),
+            btn_w,
+            btn_h,
+        )
+        spacer = Button(plt.axes(pos), name)
+        spacer.ax.patch.set_visible(False)
+        spacer.label.set_visible(False)
+        spacer.ax.axis("off")
+        super().add(spacer)
 
 
 class Selectors(AssetContainer):

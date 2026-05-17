@@ -285,6 +285,25 @@ def _get_buttons_toolbar(qt_window):
     return tb
 
 
+def add_qt_separator(figure) -> bool:
+    """Add a separator to the datanavigator QToolBar on ``figure``'s window.
+
+    Returns True if the separator was added (Qt path active), False if
+    ``figure`` is not on a Qt canvas so the caller should fall back to
+    its mpl-side spacer hack. Lazy-creates the toolbar if it doesn't
+    exist yet (matches :func:`make_qt_button`'s caching).
+    """
+    qt_window = find_qt_window(figure)
+    if qt_window is None:
+        return False
+    try:
+        tb = _get_buttons_toolbar(qt_window)
+    except ImportError:
+        return False
+    tb.addSeparator()
+    return True
+
+
 def make_qt_button(figure, name: str, type_: str = "Push", start_state: bool = True):
     """Build a Qt-backed Button or ToggleButton if ``figure`` is on a Qt canvas.
 

@@ -13,6 +13,30 @@ def test_browser_initialization():
     GenericBrowser(figure_handle=plt.figure())
 
 
+def test_buttons_add_separator_mpl_path():
+    """Buttons.add_separator() under Agg adds an invisible spacer button.
+
+    The spacer takes a layout slot so the next add() is pushed down,
+    matching today's DUSTrack hand-rolled-spacer behavior.
+    """
+    from datanavigator.assets import Button
+    b = GenericBrowser(figure_handle=plt.figure())
+    b.buttons.add(text="first")
+    n_before_sep = len(b.buttons)
+    b.buttons.add_separator()
+    n_after_sep = len(b.buttons)
+    assert n_after_sep == n_before_sep + 1, "separator should occupy a slot"
+    # The spacer is a Button (mpl path) with an auto-generated name and
+    # its visible bits switched off.
+    spacer = b.buttons._list[-1]
+    assert isinstance(spacer, Button)
+    assert spacer.name.startswith("__separator_")
+    assert spacer.ax.patch.get_visible() is False
+    assert spacer.label.get_visible() is False
+    # And add_separator() returns None on both paths.
+    assert b.buttons.add_separator() is None
+
+
 def test_buttons_use_mpl_path_under_agg():
     """Soft Qt mode: under Agg, Buttons.add returns mpl widgets, not Qt wrappers.
 

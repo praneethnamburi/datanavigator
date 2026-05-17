@@ -248,6 +248,10 @@ class TextView:
         if new_text is not None:
             self.text = self.parse_text(new_text)
         if self._overlay is not None:
+            # Propagate any post-construction _pos mutation to the overlay,
+            # mirroring the mpl path below (which always re-reads self._pos).
+            # DUSTrack relies on this to move state-variables to "bottom left".
+            self._overlay._pos = self._pos
             self._overlay.update(self.text)
             return
         if self._text is not None:
