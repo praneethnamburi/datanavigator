@@ -232,6 +232,14 @@ class TextView:
             # one and left it empty -- it showed up as a blank rectangle in
             # the figure). DUSTrack hit this with statevariables.
             self._ax = None
+            # Still call plt.show(block=False) -- the mpl path's setup()
+            # does this, and consumers rely on it. Notably,
+            # GenericBrowser.show_key_bindings("new") creates a fresh
+            # plt.figure() and then a TextView on it; without plt.show
+            # here the new figure never becomes visible. Found by DUSTrack
+            # live probe: sniffer fires on click, new keybind window
+            # never opens.
+            plt.show(block=False)
             return
 
         # mpl fallback: create the spacer Axes the Text artist lives on.
