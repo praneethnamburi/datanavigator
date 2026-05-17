@@ -25,13 +25,20 @@ Output is a single block of stats so two runs can be diffed by eye or
 piped through grep.
 """
 
+import argparse
+import logging
 import os
-import sys
 import statistics
+import subprocess
+import sys
 import time
+from datetime import datetime
 
 os.environ.setdefault("QT_API", "pyqt5")
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+# Silence the numexpr INFO log fired by tables/pandas on import.
+logging.getLogger("numexpr.utils").setLevel(logging.WARNING)
 
 import numpy as np
 
@@ -39,7 +46,27 @@ import matplotlib
 matplotlib.use("QtAgg")
 
 from matplotlib import pyplot as plt
+from qtpy.QtCore import QtMsgType, qInstallMessageHandler
 from qtpy.QtWidgets import QApplication
+
+
+# Drop known-cosmetic Qt warnings before any Qt object is created. These
+# are emitted by the offscreen plugin (propagateSizeHints / raise) and by
+# QFontDatabase looking in conda-specific font dirs that don't exist on
+# modern installs -- Qt falls back to system fonts and renders fine.
+def _silence_known_qt_warnings(msg_type, _context, message):
+    if msg_type == QtMsgType.QtWarningMsg:
+        for needle in (
+            "Cannot find font directory",
+            "does not support propagateSizeHints",
+            "does not support raise",
+        ):
+            if needle in message:
+                return
+    sys.stderr.write(message + "\n")
+
+
+qInstallMessageHandler(_silence_known_qt_warnings)
 
 app = QApplication.instance() or QApplication([])
 
@@ -98,14 +125,90 @@ class BenchBrowser(dnav.GenericBrowser):
         plt.draw()
 
 
+def _compute_stats(times_ms: list) -> dict:
+    """Return a dict of summary stats from a list of per-frame durations."""
+    s = sorted(times_ms)
+    n = len(s)
+    return {
+        "n": n,
+        "min": min(times_ms),
+        "median": statistics.median(times_ms),
+        "mean": statistics.mean(times_ms),
+        "p95": s[int(n * 0.95)],
+        "p99": s[int(n * 0.99)] if n > 100 else s[-1],
+        "max": max(times_ms),
+    }
+
+
+def _git_describe() -> str:
+    """Short HEAD identifier, e.g. '1.4.0-qt @ 01e8cdb'. Empty on failure."""
+    try:
+        branch = subprocess.check_output(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+            cwd=REPO_ROOT, stderr=subprocess.DEVNULL, text=True,
+        ).strip()
+        sha = subprocess.check_output(
+            ["git", "rev-parse", "--short", "HEAD"],
+            cwd=REPO_ROOT, stderr=subprocess.DEVNULL, text=True,
+        ).strip()
+        dirty = subprocess.check_output(
+            ["git", "status", "--porcelain"],
+            cwd=REPO_ROOT, stderr=subprocess.DEVNULL, text=True,
+        ).strip()
+        suffix = "-dirty" if dirty else ""
+        return f"{branch} @ {sha}{suffix}"
+    except Exception:
+        return ""
+
+
+def _append_to_benchmarking_md(label: str, stats: dict, n_warmup: int) -> None:
+    """Append a result block to BENCHMARKING.md under the Raw results heading."""
+    md_path = os.path.join(REPO_ROOT, "BENCHMARKING.md")
+    if not os.path.exists(md_path):
+        sys.stderr.write(f"--record: {md_path} not found; create it first.\n")
+        return
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    block = [
+        "",
+        f"### {label} -- {ts}",
+        "",
+        f"- git: `{_git_describe() or 'unknown'}`",
+        f"- source: `{dnav.__file__}`",
+        f"- version: `{dnav.__version__}`",
+        f"- backend: {matplotlib.get_backend()}, qt_api={os.environ.get('QT_API', '?')}, "
+        f"qt_plat={os.environ.get('QT_QPA_PLATFORM', 'default')}",
+        f"- N={stats['n']} ({n_warmup} warmup discarded)",
+        "",
+        "| min | median | mean | p95 | p99 | max | fps (median) |",
+        "|---|---|---|---|---|---|---|",
+        f"| {stats['min']:.2f} | {stats['median']:.2f} | {stats['mean']:.2f} "
+        f"| {stats['p95']:.2f} | {stats['p99']:.2f} | {stats['max']:.2f} "
+        f"| {1000.0 / stats['median']:.1f} |",
+    ]
+    with open(md_path, "a", encoding="utf-8") as f:
+        f.write("\n".join(block) + "\n")
+    print(f"appended results block to {md_path}")
+
+
 def main():
-    n_frames = 200
-    n_warmup = 10
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--n-frames", type=int, default=200,
+                        help="Total frames to render (default 200)")
+    parser.add_argument("--n-warmup", type=int, default=10,
+                        help="Frames discarded as warmup (default 10)")
+    parser.add_argument("--record", metavar="LABEL",
+                        help="Append a results block to BENCHMARKING.md under "
+                             "this label (e.g. '1.4.0-qt', 'master baseline')")
+    args = parser.parse_args()
+
+    n_frames = args.n_frames
+    n_warmup = args.n_warmup
 
     print("=" * 60)
     print(f"datanavigator frame-update benchmark")
     print(f"  source : {dnav.__file__}")
     print(f"  version: {dnav.__version__}")
+    print(f"  git    : {_git_describe() or 'unknown'}")
     print(f"  backend: {matplotlib.get_backend()}")
     print(f"  qt_api : {os.environ.get('QT_API', '?')}")
     print(f"  Qt plat: {os.environ.get('QT_QPA_PLATFORM', 'default')}")
@@ -130,22 +233,20 @@ def main():
         if i >= n_warmup:
             times_ms.append((t1 - t0) * 1000)
 
-    times_sorted = sorted(times_ms)
-    n = len(times_ms)
-    p95 = times_sorted[int(n * 0.95)]
-    p99 = times_sorted[int(n * 0.99)] if n > 100 else times_sorted[-1]
-
-    print(f"N measured  = {n}")
-    print(f"min         = {min(times_ms):7.2f} ms")
-    print(f"median      = {statistics.median(times_ms):7.2f} ms")
-    print(f"mean        = {statistics.mean(times_ms):7.2f} ms")
-    print(f"p95         = {p95:7.2f} ms")
-    print(f"p99         = {p99:7.2f} ms")
-    print(f"max         = {max(times_ms):7.2f} ms")
-    print(f"effective fps (median) = "
-          f"{1000.0 / statistics.median(times_ms):6.1f}")
-    print(f"effective fps (p95)    = {1000.0 / p95:6.1f}")
+    stats = _compute_stats(times_ms)
+    print(f"N measured  = {stats['n']}")
+    print(f"min         = {stats['min']:7.2f} ms")
+    print(f"median      = {stats['median']:7.2f} ms")
+    print(f"mean        = {stats['mean']:7.2f} ms")
+    print(f"p95         = {stats['p95']:7.2f} ms")
+    print(f"p99         = {stats['p99']:7.2f} ms")
+    print(f"max         = {stats['max']:7.2f} ms")
+    print(f"effective fps (median) = {1000.0 / stats['median']:6.1f}")
+    print(f"effective fps (p95)    = {1000.0 / stats['p95']:6.1f}")
     print("=" * 60)
+
+    if args.record:
+        _append_to_benchmarking_md(args.record, stats, n_warmup)
 
     plt.close(b.figure)
     return 0
