@@ -21,15 +21,34 @@ authoritative roadmap lives in
   Grep anchor: `DUSTrack-shaped` (5 occurrences in
   `pointtracking.py`, all on `VideoAnnotation`). Leaves datanavigator
   modality-agnostic and gives DUSTrack the DLC story end-to-end.
-- **Lift the `numpy<2` pin.** Currently pinned transitively via
-  `tables` (PyTables 3.10 adds numpy-2 support) and `decord` (no
-  numpy-2 wheels). Re-evaluate once CI confirms both work on numpy 2.x
-  across the matrix.
-- **Re-add `macos-latest` to the CI matrix.** Dropped from 1.2.0
-  because `decord` has no Apple Silicon (arm64) wheel and
-  `macos-latest` is now arm64 — `pip install` failed at resolution.
-  Re-add once `decord` is replaced (e.g. with `eva-decord` or a
-  PyAV-based shim) or wrapped in an optional dependency.
+- **Swap `decord` → PyAV+TOC** (greenlit by the 2026-05-16 parity
+  test, see
+  [`pn-specs/plans/20260516_decord_pyav_parity.md`](https://github.com/praneethnamburi/pn-specs/blob/master/plans/20260516_decord_pyav_parity.md)
+  — internal). Lifts the `numpy<2` pin as a side effect. Also a
+  correctness improvement: decord disagrees with the ffmpeg-CLI
+  oracle on 8/28 frames of the production VFR ultrasound clip;
+  PyAV+TOC matches all 28. Implementation: vendor PIMS's
+  `PyAVReaderIndexed` (BSD-3, single class, ~300 LOC, attribution
+  header) OR add `pims` as a dep — decide during the Phase 1 planning
+  session. Re-export `VideoReader` / `cpu` / `Video` from
+  `datanavigator/__init__.py` so downstream repos (DUSTrack,
+  immersionToolbox, pn-projects, blender-ScriptViz) do a one-line
+  `from decord import ...` → `from datanavigator import ...` swap.
+  Re-run `tests/decord_pyav_parity/run_parity.py --full` against the
+  new in-repo `datanavigator.VideoReader` as a regression gate.
+- **Fix RGB/BGR latent bug at `datanavigator/utils.py:322` and
+  `datanavigator/opticalflow.py:60`.** Decord (and PyAV with `rgb24`)
+  return RGB but the code calls `cv.COLOR_BGR2GRAY` — swaps red and
+  blue before greyscale. Behavior is observable but small (LK
+  gradients are mostly robust to the swap, which is why this never
+  surfaced). Bundle with the decord swap above (both touch the same
+  files). Audit `immersionlab/cep.py` for the same `BGR2GRAY` pattern
+  during the immersionToolbox migration phase.
+- **Re-add `macos-latest` to the CI matrix + drop `continue-on-error`
+  from macOS / Windows runners.** Unblocked by the decord swap above
+  — decord's missing Apple Silicon wheel was the original reason for
+  exclusion, and the `numpy<2` pin was the original reason for the
+  flag on Windows.
 - **Full type-hint sweep** on `assets.py`, `videos.py`, `utils.py`,
   `signals.py`, `core.py`, `__init__.py`, `examples.py`,
   `opticalflow.py` — the 1.2.0 audit only modernized files it was
