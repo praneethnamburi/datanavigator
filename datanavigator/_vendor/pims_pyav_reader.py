@@ -22,11 +22,14 @@ from __future__ import annotations
 import numpy as np
 from numpy import asarray, ndarray
 
-
-try:
-    import av
-except ImportError:
-    av = None
+# Deviation from upstream: the original PIMS file wraps this import in
+# ``try / except ImportError`` (av = None) because PIMS supports other
+# readers and av is optional there. In datanavigator av is the only
+# backend, so silently degrading to ``av is None`` produces a cryptic
+# ``'NoneType' object has no attribute 'open'`` at ``av.open(...)``
+# inside ``__init__``. Import unconditionally so a missing dep fails
+# loud at ``import datanavigator`` time instead.
+import av
 
 
 def available():
