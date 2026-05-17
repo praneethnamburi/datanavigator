@@ -86,6 +86,7 @@ from .utils import (
     is_video,
     ticks_from_times,
 )
+from .video_reader import VideoReader, cpu
 
 from .examples import (
     get_example_video,
@@ -143,6 +144,8 @@ __all__ = [
     "ComponentBrowser",
     # Point tracking
     "Video",
+    "VideoReader",
+    "cpu",
     "VideoAnnotation",
     "VideoAnnotations",
     "VideoPointAnnotator",

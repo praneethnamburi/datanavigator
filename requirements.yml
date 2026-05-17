@@ -5,15 +5,15 @@ channels:
 dependencies:
   - python>=3.10,<=3.13
   - pip
-  - numpy<2
+  - numpy
   - pandas
   - matplotlib
   - portion
   - ffmpeg-python
-  - pytables
+  - pytables>=3.10
   - tqdm
   - pytest
   - pip:
     - opencv-python
     - pysampled
-    - decord
+    - av

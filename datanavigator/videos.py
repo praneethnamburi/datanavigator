@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from typing import Callable, Dict, Optional, Union
 
 import pysampled
-from decord import VideoReader
+from .video_reader import VideoReader
 from matplotlib import pyplot as plt
 from matplotlib.backend_bases import MouseButton
 from matplotlib.gridspec import GridSpec

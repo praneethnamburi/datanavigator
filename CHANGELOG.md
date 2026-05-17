@@ -1,6 +1,80 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
+## [1.3.0] - 2026-05-17
+
+Video-reader backend swap: drop the `decord` runtime dependency in
+favour of an in-tree PyAV+TOC reader. Public API is preserved — all
+existing call sites (`vr[i].asnumpy()`, slicing, `vr.get_batch([...]).asnumpy()`,
+`len(vr)`, iteration, `vr.get_avg_fps()`, `Video(VideoReader)`
+subclass) continue to work unchanged.
+
+The swap is motivated by the 2026-05-16 frame-parity test (canonical
+record at `pn-portfolio/plans/20260516_decord_pyav_parity.md`):
+decord disagrees with the ffmpeg-CLI oracle on 8/28 frames of a
+production VFR telemed clip (PSNR 32–37 dB on the divergent frames);
+PyAV+TOC matches the oracle pixel-exact on all 28 frames across
+11 test clips and every codec exercised (libx264 / libx264+B /
+h264_nvenc ±B / hevc_nvenc / paired CPU↔GPU). The swap is therefore
+not just a dependency cleanup — it is a **correctness improvement**
+on real lab videos.
+
+### Added
+- `VideoReader` and `cpu` re-exported at the `datanavigator` package
+  root (`from datanavigator import VideoReader, cpu`). These provide
+  a decord-compatible API surface — `VideoReader(uri, ctx, width,
+  height, num_threads, fault_tol)` constructor signature, `vr[i]`
+  / slice / `get_batch([...])` returning objects with `.asnumpy()`,
+  `len()`, iteration, `get_avg_fps()`. `cpu(0)` is a no-op sentinel
+  for call-site parity (PyAV is CPU-only here).
+- `datanavigator/_vendor/pims_pyav_reader.py` — `PyAVReaderIndexed`
+  class vendored from the PIMS project (BSD-3-Clause, upstream
+  commit `d599596`, 2023-01-24). The full upstream license is
+  reproduced in `datanavigator/_vendor/LICENSE-PIMS`. PIMS itself
+  is **not** a runtime dependency.
+- `tests/test_video_reader.py` — unit-test coverage for the shim
+  (indexing, slicing, `get_batch`, `len` / iteration, `get_avg_fps`,
+  `cpu` sentinel, `Video.gray` RGB-fix regression gate).
+- A `dnav_pyav_toc` reader entry in the parity harness
+  (`tests/decord_pyav_parity/readers.py`) — confirms the vendored+
+  wrapped reader matches the upstream PIMS reader row-for-row.
+
+### Changed
+- **Video-reading backend swapped from `decord` to PyAV+TOC**, with
+  the public API preserved (see Added). Internal imports in
+  `utils.py`, `videos.py`, and `opticalflow.py` now route through
+  the in-tree shim.
+- CI matrix re-adds `macos-latest`. `continue-on-error` removed from
+  Windows runners — test failures now block on all three OSes. A
+  brew-based `ffmpeg` install step is added for the macOS runner.
+
+### Fixed
+- **`Video.gray` and `opticalflow.lucas_kanade` grayscale conversion
+  channel order.** Both previously called `cv.COLOR_BGR2GRAY` on
+  RGB-decoded frames, silently swapping R and B before the
+  grayscale weighting. Now use `cv.COLOR_RGB2GRAY`. This is an
+  observable behavior change for any caller depending on the buggy
+  luminance — call sites that compared grayscale frames across the
+  upgrade boundary will see different values. Affected files:
+  `datanavigator/utils.py` (`Video.gray`) and
+  `datanavigator/opticalflow.py` (`lucas_kanade.gray` inner helper).
+
+### Removed
+- `decord` runtime dependency (replaced by in-tree PyAV+TOC reader).
+- `numpy<2` pin in `pyproject.toml` and `requirements.yml` — the pin
+  was held by `decord` + `tables<3.10`; both gates are now gone.
+- Implicit `tables<3.10` upper bound: the dep is now `tables>=3.10`
+  to make NumPy-2 compatibility an explicit hard requirement.
+
+### Infrastructure
+- `pyproject.toml`: `decord` → `av`; `numpy<2` → `numpy`;
+  `tables` → `tables>=3.10`.
+- `requirements.yml`: same set of changes (`decord` → `av` in the
+  pip section; `numpy<2` → `numpy`; `pytables` → `pytables>=3.10`).
+- `.github/workflows/ci.yml`: `macos-latest` re-added to matrix;
+  `continue-on-error` dropped from Windows; brew step added for
+  macOS ffmpeg install.
+
 ## [1.2.0] - 2026-05-16
 Audit-and-polish release. No public API changes.
 

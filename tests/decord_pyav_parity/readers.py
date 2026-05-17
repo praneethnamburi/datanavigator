@@ -96,6 +96,27 @@ def pyav_toc_len(path: str | Path) -> int:
     return len(_pims_reader(str(path)))
 
 
+# ---------- datanavigator-wrapped PyAV+TOC (post 1.3.0 vendored shim) ----------
+
+@lru_cache(maxsize=8)
+def _dnav_vr(path: str):
+    import datanavigator as dnav
+
+    return dnav.VideoReader(path)
+
+
+def dnav_pyav_toc_read_frame(path: str | Path, index: int) -> np.ndarray:
+    return np.asarray(_dnav_vr(str(path))[int(index)])
+
+
+def dnav_pyav_toc_read_batch(path: str | Path, indices: Sequence[int]) -> np.ndarray:
+    return _dnav_vr(str(path)).get_batch([int(i) for i in indices]).asnumpy()
+
+
+def dnav_pyav_toc_len(path: str | Path) -> int:
+    return len(_dnav_vr(str(path)))
+
+
 # ---------- OpenCV (positive control — known to be wrong on NVENC) ----------
 
 import cv2
@@ -116,8 +137,9 @@ def opencv_read_frame(path: str | Path, index: int) -> np.ndarray:
 # ---------- Registry ----------
 
 READERS = {
-    "decord":     decord_read_frame,
-    "pyav_naive": pyav_naive_read_frame,
-    "pyav_toc":   pyav_toc_read_frame,
-    "opencv":     opencv_read_frame,
+    "decord":         decord_read_frame,
+    "pyav_naive":     pyav_naive_read_frame,
+    "pyav_toc":       pyav_toc_read_frame,
+    "dnav_pyav_toc":  dnav_pyav_toc_read_frame,
+    "opencv":         opencv_read_frame,
 }
