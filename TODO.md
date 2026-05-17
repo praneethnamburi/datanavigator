@@ -25,6 +25,11 @@ authoritative roadmap lives in
   `tables` (PyTables 3.10 adds numpy-2 support) and `decord` (no
   numpy-2 wheels). Re-evaluate once CI confirms both work on numpy 2.x
   across the matrix.
+- **Re-add `macos-latest` to the CI matrix.** Dropped from 1.2.0
+  because `decord` has no Apple Silicon (arm64) wheel and
+  `macos-latest` is now arm64 — `pip install` failed at resolution.
+  Re-add once `decord` is replaced (e.g. with `eva-decord` or a
+  PyAV-based shim) or wrapped in an optional dependency.
 - **Full type-hint sweep** on `assets.py`, `videos.py`, `utils.py`,
   `signals.py`, `core.py`, `__init__.py`, `examples.py`,
   `opticalflow.py` — the 1.2.0 audit only modernized files it was
