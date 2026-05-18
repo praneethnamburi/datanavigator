@@ -131,6 +131,48 @@ architectural change (OpenGL canvas, QPixmap-backed imshow, or
   `opticalflow.py` -- the 1.2.0 audit only modernized files it was
   already touching.
 
+### Axis-limit polish (from the 1.3.1 audit)
+
+A focused audit of axis-limit changes (`set_xlim/ylim`, `autoscale`,
+`relim`, `fill_between`, `Grouper`) accompanied the 1.3.1 fix for
+`Event._get_ylim` (events.py:609, xdata vs ydata). Three further
+items surfaced -- none are bugs at the user-visible level today,
+all are real correctness / forward-compat improvements that
+belong on the Qt-branch surface (which is already in motion). None
+were folded into 1.3.1 because they are either behavior changes
+(not patch-release material) or live on files already moved on
+this branch.
+
+- **`videos.py:295-298` `VideoPlotBrowser` playhead tick is y-clipped.**
+  The vertical playhead is drawn as a `Line2D` from `y=ylim[0]` to
+  `y=ylim[1]` captured at setup time. Two consequences: (1) if the
+  user zooms in y or the signal y-range grows, the playhead is
+  clipped to its original ydata range; (2) the tick's own ydata
+  caps `dataLim`, so subsequent `relim()` can't shrink past it.
+  Fix: `this_ax.axvline(0, color='k')` instead of
+  `this_ax.plot([0,0], ylim, "k")`. Behavior change (playhead now
+  spans the current axis bounds, not the setup-time bounds).
+  Tier 2's separate (12,3) trace canvas will rework this region
+  anyway -- worth fixing in the same pass.
+- **`components.py:152-156` `ComponentBrowser` signal separators are
+  static at setup ylim.** Same pattern as the playhead tick -- the
+  per-signal separator lines are drawn at `[x_pos]*2, this_ylim`
+  with `this_ylim` captured once. Fix: `axvline(x_pos, color='k',
+  linewidth=0.2)`. `components.py` is unchanged on this branch,
+  so it's a clean edit. Behavior change (separators follow zoom).
+- **`core.py:158-170` `reset_axes` uses deprecated `SubplotBase`
+  filter, and `relim()` misses collections on older matplotlib.**
+  `isinstance(ax, maxes.SubplotBase)` was deprecated in mpl 3.7
+  and is on track for removal; the over-restrictive filter also
+  drops inset and colorbar axes that callers might reasonably
+  want included. `relim()` ignored `PolyCollection` (i.e.
+  `fill_between` artists -- e.g. fill-display events) until
+  recent mpl. Fix: drop the `SubplotBase` filter (use
+  `ax.get_subplotspec() is not None` only if exclusion is
+  intentional); decide the matplotlib floor for this branch.
+  Pair with the floor question that's already pending for the
+  Qt rework.
+
 ## Nice-to-have
 
 - `components.py` — simplify the verbose palette idiom
