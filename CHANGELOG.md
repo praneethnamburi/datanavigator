@@ -66,6 +66,16 @@ areas.
   the widest entry. Rows are now visually grouped with a sunken
   `QFrame.HLine` separator between adjacent state variables.
   Reported during DUSTrack 1.1.0rc2 testing.
+- Left-column dock host gets `setMinimumWidth(_LEFT_COLUMN_MIN_WIDTH=300)`
+  (a touch above the pre-rc2 `sidebar_width=280` default; tuned
+  empirically during DUSTrack 1.1.0rc2 testing). Combined with
+  `_QtStatevarsWidget` switching its horizontal size policy from
+  `Fixed` → `Preferred`, the statevars widget now fills the column
+  instead of sticking to its own sizeHint; each combo (already
+  `Expanding` horizontal) therefore reaches the column edge even when
+  its current state value is short (e.g. `select` / `place`). Reported
+  during the same DUSTrack 1.1.0rc2 testing pass that motivated the
+  stacked-layout fix above.
 - `StateVariables.show()` tries the new Qt widget path first and falls
   back to `TextView` on non-Qt backends. The `pos` / `fax` arguments
   are only consulted on the fallback (`pos` is ignored on the Qt

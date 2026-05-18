@@ -294,6 +294,16 @@ def _make_qt_button_classes():
     return _QtPushButton, _QtToggleButton
 
 
+#: Minimum width (px) of the left-column dock host. Sized a touch
+#: above the pre-rc2 fast_render ``sidebar_width=280`` default so the
+#: column is unconditionally wide enough to show full DLC layer names
+#: (e.g. ``dlc_iteration-3_250000``) in the statevars dropdowns, and
+#: so combos that hold *short* values (e.g. ``select`` / ``place``)
+#: don't end "somewhere in the middle of the sidebar". Tuned to 300
+#: empirically 2026-05-18 during DUSTrack 1.1.0rc2 testing.
+_LEFT_COLUMN_MIN_WIDTH = 300
+
+
 def _get_left_column(qt_window):
     """Build (or return the cached) two-section left column on ``qt_window``.
 
@@ -308,6 +318,13 @@ def _get_left_column(qt_window):
     (motivating example: VideoPointAnnotator adds its "Refresh UI"
     button in ``set_key_bindings``, which runs after the statevars
     setup).
+
+    Width contract: ``host`` carries a minimum width of
+    :data:`_LEFT_COLUMN_MIN_WIDTH` so the column doesn't shrink to fit
+    short button labels / short statevar values. Combined with the
+    statevars widget's ``Preferred`` (not ``Fixed``) horizontal size
+    policy, this means each statevar control fills the full column
+    width regardless of its current content.
 
     Cached on the QMainWindow as ``_dnav_left_column``. The legacy
     ``_dnav_buttons_widget`` attribute still points to the buttons
@@ -342,6 +359,7 @@ def _get_left_column(qt_window):
     outer.addStretch(1)
 
     host.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+    host.setMinimumWidth(_LEFT_COLUMN_MIN_WIDTH)
     dock.setWidget(host)
     qt_window.addDockWidget(Qt.LeftDockWidgetArea, dock)
 
@@ -511,7 +529,15 @@ def _make_qt_statevars_widget_class():
                     sep.setFrameShadow(QFrame.Sunken)
                     self._layout.addWidget(sep)
 
-            self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+            # Horizontal: ``Preferred`` (not ``Fixed``) so the statevars
+            # widget fills the column when the column's effective width
+            # is wider than the widget's own sizeHint -- which is the
+            # common case once _LEFT_COLUMN_MIN_WIDTH bumps the column
+            # past the widest combo content. Combined with each combo's
+            # ``Expanding`` horizontal policy, every dropdown then
+            # reaches the column edge regardless of how short its
+            # current state value is.
+            self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
 
             # Pre-rc2 text-sink protocol parity (see class docstring).
             self.text = []
