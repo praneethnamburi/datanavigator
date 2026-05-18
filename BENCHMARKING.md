@@ -90,13 +90,24 @@ lives behind blit-mode.
    for the traces). Both are sized like the spec's 2.0.0
    from-scratch Qt rewrite, not under-the-hood 1.4.0.
 
-2. **Video-frame pre-decoding / lookahead** in `video_reader.py`.
-   PyAV decode is ~7.7 ms / frame on this video; pre-decode in a
-   worker thread takes it out of the timing path for forward
-   scrubbing. Small but real win, no architectural change. The
-   correctness invariant -- "pre-decoded frame == fresh-decoded
-   frame" -- needs explicit verification given PyAV/Frame buffer
-   ownership concerns.
+2. ~~**Video-frame pre-decoding / lookahead.**~~ Investigated
+   2026-05-17 and **declined**. The accuracy story is fine
+   (`PyAV.to_ndarray('rgb24')` allocates a fresh ndarray and is
+   deterministic, so a single-worker-thread design with serialized
+   decode is provably correct), but the win is only ~7.7 ms / frame
+   on this video -- ~8% of the post-cache_quick_wins budget -- and
+   not worth the concurrency surface (lock contention on backward
+   jumps, worker lifecycle on figure close, byte-equivalence
+   regression tests). Reopen only if rendering pipeline changes
+   shift decode into a meaningful fraction.
+
+The under-the-hood perf arc on `1.4.0-qt` is **complete** as of
+2026-05-17. Cumulative win: **141.6 -> 93.8 ms median, 7.1 -> 10.7
+fps, 1.51x speedup over 1.3.0.** Further gains require architectural
+change (OpenGL-backed canvas, render imshow outside matplotlib via
+QPixmap/QGraphicsView, or a 2.0.0 from-scratch Qt rewrite) -- the
+remaining 82 ms is the Qt widget pixmap upload, which neither blit
+nor pre-decode can address.
 
 ## Methodology
 

@@ -72,15 +72,24 @@ is canvas raster (`processEvents()`). Ordered by expected impact:
   under-the-hood 1.4.0. Tracked in
   [`BENCHMARKING.md`](BENCHMARKING.md).
 
-- **Video-frame pre-decoding / lookahead in `video_reader.py`.** For
-  forward scrubbing, decode frames N+1..N+k in a worker thread while
-  user is on frame N. Cache hit on the next arrow press, no PyAV
-  call in the timing path. Probe 11 measured decode at ~7.7 ms /
-  frame on the interosseous_pn24-x video; pre-decode takes that out
-  of the timing path entirely. **Correctness invariant
-  ("pre-decoded frame == fresh-decoded frame") needs explicit
-  verification before any implementation -- PyAV/Frame buffer
-  ownership is non-trivial.**
+- ~~**Video-frame pre-decoding / lookahead in `video_reader.py`.**~~
+  Investigated 2026-05-17 and **declined**. The accuracy invariant
+  ("pre-decoded frame == fresh-decoded frame") is achievable --
+  PyAV's `to_ndarray('rgb24')` allocates a fresh ndarray each call
+  and is deterministic, so a single-worker-thread design with
+  serialized decode is provably correct. But the win is only ~7.7
+  ms / frame (~8% of the post-cache_quick_wins budget), and the
+  concurrency surface (lock contention on backward jumps, worker
+  lifecycle on figure close, byte-equivalence regression tests)
+  isn't worth that saving. Reopen only if rendering pipeline
+  changes shift the per-frame budget so decode becomes a meaningful
+  fraction.
+
+After cache_quick_wins, the under-the-hood perf arc on the 1.4.0-qt
+branch is **complete**. Cumulative win: 141.6 -> 93.8 ms median,
+7.1 -> 10.7 fps, **1.51x speedup** over 1.3.0. Going further requires
+architectural change (OpenGL canvas, QPixmap-backed imshow, or
+2.0.0 from-scratch rewrite) -- separate, dedicated session.
 
 ### Unresolved -- low priority
 
