@@ -57,6 +57,15 @@ areas.
   full-width. State-variables move from the in-figure mpl axis into
   the QDockWidget left column. The `_ax_statevar` attribute is still
   set (to `None`) for backwards compatibility but is unused.
+- `_QtStatevarsWidget._build_row` switched from `QHBoxLayout`
+  (name | control) to `QVBoxLayout` (name above control). Side-by-side
+  starved the combo of width so long state values
+  (e.g. `dlc_iteration-3_250000` from a DUSTrack DLC project) elided
+  to `dlc_...250000`; stacking gives the combo the full column width
+  and the dropdown is set to `AdjustToContents` so it grows to fit
+  the widest entry. Rows are now visually grouped with a sunken
+  `QFrame.HLine` separator between adjacent state variables.
+  Reported during DUSTrack 1.1.0rc2 testing.
 - `StateVariables.show()` tries the new Qt widget path first and falls
   back to `TextView` on non-Qt backends. The `pos` / `fax` arguments
   are only consulted on the fallback (`pos` is ignored on the Qt

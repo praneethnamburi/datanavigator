@@ -451,9 +451,14 @@ def _make_qt_statevars_widget_class():
 
         - ``"label"``    -- QLabel showing ``"<name>: <value>"`` (read-only;
           parity with the pre-rc2 text path).
-        - ``"dropdown"`` -- QLabel name + QComboBox.
-        - ``"toggle"``   -- QLabel name + horizontal QButtonGroup of
-          mutually-exclusive checkable QToolButtons.
+        - ``"dropdown"`` -- QLabel name *above* a QComboBox (vertical
+          stack so long state names don't get squeezed and the combo
+          gets the full column width).
+        - ``"toggle"``   -- QLabel name *above* a horizontal QButtonGroup
+          of mutually-exclusive checkable QToolButtons.
+
+        Rows are separated by a sunken ``QFrame.HLine`` for visual
+        grouping.
 
         Duck-typed compatibility with the pre-rc2 ``statevariables._text``
         slot:
@@ -488,12 +493,23 @@ def _make_qt_statevars_widget_class():
             self._layout.addWidget(title)
 
             # Per-statevar control rows. _sync maps name -> sync_fn(state)
-            # that resyncs the control to state.current_state.
+            # that resyncs the control to state.current_state. Rows are
+            # joined by sunken HLine separators for visual grouping so
+            # the eye doesn't have to parse where one state variable
+            # ends and the next begins -- particularly useful once the
+            # controls stack (name-above-control), which makes adjacent
+            # rows visually similar.
             self._sync = {}
-            for state in self._container._list:
+            n = len(self._container._list)
+            for i, state in enumerate(self._container._list):
                 row, sync_fn = self._build_row(state)
                 self._layout.addWidget(row)
                 self._sync[state.name] = sync_fn
+                if i < n - 1:
+                    sep = QFrame(self)
+                    sep.setFrameShape(QFrame.HLine)
+                    sep.setFrameShadow(QFrame.Sunken)
+                    self._layout.addWidget(sep)
 
             self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
 
@@ -502,16 +518,21 @@ def _make_qt_statevars_widget_class():
             self._pos = None
 
         def _build_row(self, state):
+            # rc2 polish: stack name above control (QVBoxLayout) instead
+            # of side-by-side. Side-by-side starved the combo of width
+            # so long state-values (e.g. ``dlc_iteration-3_250000``)
+            # truncated to ``dlc_...250000``. Stacked, the combo gets
+            # the full column width and shows the whole name.
             kind = getattr(state, "widget", "label")
             row = QWidget(self)
-            h = QHBoxLayout(row)
-            h.setContentsMargins(0, 0, 0, 0)
-            h.setSpacing(4)
+            v = QVBoxLayout(row)
+            v.setContentsMargins(0, 0, 0, 0)
+            v.setSpacing(2)
 
             if kind == "label":
                 lbl = QLabel(_fmt_label(state), row)
                 lbl.setWordWrap(True)
-                h.addWidget(lbl, stretch=1)
+                v.addWidget(lbl)
 
                 def sync(s, lbl=lbl):
                     lbl.setText(_fmt_label(s))
@@ -519,13 +540,17 @@ def _make_qt_statevars_widget_class():
                 return row, sync
 
             name_lbl = QLabel(f"{state.name}:", row)
-            h.addWidget(name_lbl)
+            v.addWidget(name_lbl)
 
             if kind == "dropdown":
                 combo = QComboBox(row)
                 combo.setFocusPolicy(Qt.NoFocus)
+                # Let the combo grow to fit the widest item so long
+                # state values aren't truncated in the closed state.
+                combo.setSizeAdjustPolicy(QComboBox.AdjustToContents)
+                combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
                 _populate_combo(combo, state)
-                h.addWidget(combo, stretch=1)
+                v.addWidget(combo)
 
                 container = self._container
 
@@ -576,7 +601,7 @@ def _make_qt_statevars_widget_class():
 
                 group.idClicked.connect(on_click)
 
-                h.addWidget(bgroup_w, stretch=1)
+                v.addWidget(bgroup_w)
 
                 def sync(s, btns=buttons):
                     # blockSignals so the programmatic setChecked
@@ -590,7 +615,7 @@ def _make_qt_statevars_widget_class():
 
             # Unknown widget kind: fall through to label.
             lbl = QLabel(_fmt_label(state), row)
-            h.addWidget(lbl, stretch=1)
+            v.addWidget(lbl)
             return row, (lambda s, lbl=lbl: lbl.setText(_fmt_label(s)))
 
         def update(self, text=None) -> None:
