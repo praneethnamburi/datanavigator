@@ -419,6 +419,11 @@ def _make_qt_image_pane_class():
         and re-fits the scene rect. Left and right mouse buttons pass
         through unchanged so :class:`_QtPickAdapter`'s pick / place
         callbacks keep firing for annotation work.
+
+        ``user_adjusted`` flips True on wheel-zoom or a real pan drag
+        (not on the initial auto-fit, which leaves a scale transform
+        but is not a user adjustment). :class:`_QtImagePane.resizeEvent`
+        keys off this flag to decide whether to re-fit on window resize.
         """
 
         _ZOOM_STEP = 1.25
@@ -431,6 +436,7 @@ def _make_qt_image_pane_class():
             self.setResizeAnchor(QGraphicsView.AnchorViewCenter)
             self._pan_anchor = None
             self._pan_total = 0
+            self.user_adjusted = False
 
         def wheelEvent(self, event):  # noqa: N802 (Qt naming)
             angle = event.angleDelta().y()
@@ -439,6 +445,7 @@ def _make_qt_image_pane_class():
                 return
             factor = self._ZOOM_STEP if angle > 0 else 1.0 / self._ZOOM_STEP
             self.scale(factor, factor)
+            self.user_adjusted = True
             event.accept()
 
         def mousePressEvent(self, event):  # noqa: N802 (Qt naming)
@@ -470,6 +477,10 @@ def _make_qt_image_pane_class():
                 if self._pan_total < self._CLICK_VS_DRAG_PX:
                     # Click, not drag -- reset image zoom.
                     self._image_pane.reset_view()
+                else:
+                    # Real drag -- user moved the view, stop auto-re-fit
+                    # on window resize.
+                    self.user_adjusted = True
                 event.accept()
                 return
             super().mouseReleaseEvent(event)
@@ -566,16 +577,22 @@ def _make_qt_image_pane_class():
             zoomed-in user clicking reset would partially un-zoom.
             """
             self._view.resetTransform()
+            self._view.user_adjusted = False
             self._fit_view()
 
         def resizeEvent(self, event):  # noqa: N802 (Qt naming)
             super().resizeEvent(event)
-            if self._scene_rect_set:
-                # Don't re-fit on resize if the user has zoomed/panned
-                # -- they'd lose their view. Only re-fit when the
-                # transform is identity (no user adjustment yet).
-                if self._view.transform().isIdentity():
-                    self._fit_view()
+            if self._scene_rect_set and not self._view.user_adjusted:
+                # Auto-re-fit on window resize so the image scales with
+                # the window. Once the user has wheel-zoomed or pan-
+                # dragged (``user_adjusted`` flag set by the view), we
+                # leave their view alone -- a re-fit would clobber it.
+                # ``transform().isIdentity()`` does NOT work as the
+                # gate here: the initial _fit_view() leaves a non-
+                # identity scale transform, so an identity check would
+                # block every subsequent re-fit.
+                self._view.resetTransform()
+                self._fit_view()
 
         def set_title(self, text: str) -> None:
             self._title.setText(text)
@@ -713,6 +730,17 @@ def make_image_pane(figure, picker_radius: float = 5.0,
     pane.set_focus_target(canvas)
     pane.sidebar = sidebar
     qt_window.setCentralWidget(container)
+    # Resize the host window so the image pane gets a fair share of
+    # vertical real estate. The mpl figure for Tier 2 is sized for the
+    # trace canvas only (e.g. figsize=(12, 3) in VideoPointAnnotator),
+    # so the QMainWindow's auto-fit-to-canvas size would leave the
+    # image pane ~stretch_2 / 3 of a too-short window. Match the
+    # layout's 2:1 stretch hint: total height = canvas natural height
+    # x 3, image pane lands at ~2x canvas height.
+    canvas_h = canvas.height()
+    canvas_w = canvas.width()
+    if canvas_h > 0 and canvas_w > 0:
+        qt_window.resize(canvas_w, canvas_h * 3)
     # Stash on the window so other code can find it (e.g. parity tests,
     # status overlays) and so subsequent calls can short-circuit.
     qt_window._dnav_image_pane = pane
