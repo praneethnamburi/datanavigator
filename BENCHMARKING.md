@@ -27,6 +27,7 @@ Two harnesses:
 | 1.3.0 (datanavigator+dustrack)       | 141.6     | 141.7   | 144.1  | 7.1          | 1.00x   |
 | 1.4.0-qt (both)                      | 128.6     | 128.8   | 130.8  | 7.8          | 1.10x   |
 | 1.4.0-qt + cache_quick_wins          | 93.8      | 93.8    | 95.9   | 10.7         | **1.51x** |
+| 1.5.0-fast-render Tier 2             | 36.0      | 36.0    | 37.2   | 27.8         | **3.94x** |
 
 ### How the cache_quick_wins layer fits in
 
@@ -137,6 +138,82 @@ change (OpenGL-backed canvas, render imshow outside matplotlib via
 QPixmap/QGraphicsView, or a 2.0.0 from-scratch Qt rewrite) -- the
 remaining 82 ms is the Qt widget pixmap upload, which neither blit
 nor pre-decode can address.
+
+## 1.5.0 -- `fast_render` (Tier 2 Qt-native video pane)
+
+The architectural change probe 13 surveyed was implemented in 1.5.0
+as an opt-in second tier (`VideoBrowser(..., fast_render=True)`,
+threaded through `VideoPointAnnotator` and `DUSTrack`). Tier 1
+(`fast_render=False`, default) is unchanged.
+
+In Tier 2:
+- The video frame renders to a `QGraphicsView` + `QGraphicsPixmapItem`
+  parented to the QMainWindow's central widget, above the matplotlib
+  canvas. `QImage(rgb)->QPixmap.fromImage->setPixmap` per frame.
+- The annotation scatter renders to a `QGraphicsItemGroup` of
+  per-marker `QGraphicsEllipseItem`s, wrapped by `_QtScatterArtist`
+  (a duck-typed match for the matplotlib `PathCollection` subset
+  `VideoAnnotation` calls).
+- Mouse pick / button-press over the image region routes through
+  `_QtPickAdapter` (an `eventFilter` on the view's viewport) which
+  fires synthetic mpl-shaped events; the existing `pick_event` /
+  `button_press_event` callbacks in pointtracking.py work unchanged.
+- The matplotlib canvas covers only the trace region (figure size
+  reduced to `(12, 3)` in Tier 2), so its per-frame raster cost is
+  much smaller than the full `(12, 8)` Tier 1 figure.
+
+### Probe 14 result
+
+`tests/qt_learning/14_benchmark_fast_render.py` measured the same
+real DUSTrack UI on the same `interosseous_pn24-x` video used by
+probes 09/11/12/13:
+
+| segment / total        | 1.4.0-qt + cache | 1.5.0 fast_render | delta |
+|------------------------|-----------------:|------------------:|------:|
+| update body            |            11.43 |             11.42 |  ~0    |
+| process_events (raster + upload) |  82.39 |             24.42 | -57.97 |
+| **total (median)**     |        **93.80** |         **35.97** | -57.83 |
+| **fps (median)**       |         **10.7** |          **27.8** | +17.1  |
+
+**Speedup: 2.6x over 1.4.0-qt + cache_quick_wins, 3.94x over
+1.3.0 baseline.**
+
+The plan's aspirational threshold was 25 ms / 40 fps (probe 13's
+~17-22 ms prediction); we landed at 36 ms / 28 fps. The gap is in
+process_events (24 ms vs predicted 6-12 ms). Diagnostic probes
+during 14 development surfaced two contributors:
+
+- **`constrained_layout=True` re-runs on every draw**: cost ~25 ms
+  on a trace-only canvas where the layout solver runs over many
+  Line2D objects. Tier 2 explicitly uses `constrained_layout=False`
+  with a manual `subplots_adjust` to bypass this; without that
+  change, fast_render measured 60-70 ms (1.4x speedup -- not the
+  ship-worthy claim).
+- **`canvas.draw()` is ~15 ms** even on a 1200x100 px trace canvas
+  with mostly invisible Line2Ds. Hidden artists still pay some
+  Agg-render overhead; the trace canvas keeps ~30 lines per axis
+  (one per (label, annotation) pair), of which only ~3 are visible
+  in any given frame. Reducing the line count would help; this is
+  scoped for a future iteration.
+
+The Qt-side pane was microbenched independently at ~0.6 ms / frame
+(versus QLabel's 0.25 ms): the `QGraphicsView` path is well below
+the matplotlib trace canvas's residual cost. There's no point
+swapping to QLabel until the trace canvas drops below ~5 ms.
+
+### Tier 2 ergonomic cost (1.5.0)
+
+The image region is no longer an mpl `Axes`, so users who relied on
+the Tier-1 ergonomic of adding ad-hoc mpl overlays (e.g.
+`self._ax_image.plot(...)` in a subclass override) get neither the
+overlay nor an error: `_ax_image` is the `_QtImagePane` instance.
+The audit before the 1.5.0 plan confirmed no portfolio code does
+this today; DUSTrack's `_apply_dark_theme` was the only external
+touch on the image axis (`_ax_image.set_facecolor(ax_color)`), and
+it now routes through `VideoPointAnnotator.set_image_background_color`
+which dispatches per tier. Forward-looking constraint: subclassing
+with `fast_render=True` requires Qt-side overlays for image-region
+augmentations.
 
 ## Methodology
 
@@ -270,3 +347,39 @@ Summary table above.
 | min | median | mean | p95 | p99 | max | fps (median) |
 |---|---|---|---|---|---|---|
 | 91.72 | 93.77 | 93.80 | 95.85 | 99.24 | 99.24 | 10.7 |
+
+### DUSTrack UI -- 1.5.0-fast-render Tier 2 -- 2026-05-17 22:39:30
+
+- datanavigator: `1.5.0-fast-render@52f5da1-dirty` source `C:\dev\datanavigator\datanavigator\__init__.py`
+- dustrack: `1.5.0-fast-render@4f271b4-dirty` source `C:\dev\DUSTrack\dustrack\__init__.py`
+- backend: QtAgg, qt_api=pyside6, qt_plat=default
+- fast_render: True
+- N=185 (15 warmup discarded)
+
+| min | median | mean | p95 | p99 | max | fps (median) |
+|---|---|---|---|---|---|---|
+| 66.23 | 68.32 | 68.63 | 70.88 | 74.03 | 75.15 | 14.6 |
+
+### DUSTrack UI -- 1.5.0-fast-render Tier 2 (trace-only canvas) -- 2026-05-17 22:43:19
+
+- datanavigator: `1.5.0-fast-render@52f5da1-dirty` source `C:\dev\datanavigator\datanavigator\__init__.py`
+- dustrack: `1.5.0-fast-render@4f271b4-dirty` source `C:\dev\DUSTrack\dustrack\__init__.py`
+- backend: QtAgg, qt_api=pyside6, qt_plat=default
+- fast_render: True
+- N=185 (15 warmup discarded)
+
+| min | median | mean | p95 | p99 | max | fps (median) |
+|---|---|---|---|---|---|---|
+| 64.81 | 71.05 | 71.66 | 81.18 | 84.92 | 87.60 | 14.1 |
+
+### DUSTrack UI -- 1.5.0-fast-render Tier 2 (final) -- 2026-05-17 22:51:32
+
+- datanavigator: `1.5.0-fast-render@52f5da1-dirty` source `C:\dev\datanavigator\datanavigator\__init__.py`
+- dustrack: `1.5.0-fast-render@4f271b4-dirty` source `C:\dev\DUSTrack\dustrack\__init__.py`
+- backend: QtAgg, qt_api=pyside6, qt_plat=default
+- fast_render: True
+- N=185 (15 warmup discarded)
+
+| min | median | mean | p95 | p99 | max | fps (median) |
+|---|---|---|---|---|---|---|
+| 34.43 | 35.97 | 36.03 | 37.21 | 37.97 | 39.82 | 27.8 |

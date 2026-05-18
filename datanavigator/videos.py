@@ -87,6 +87,7 @@ class VideoBrowser(GenericBrowser):
         titlefunc: Optional[Callable] = None,
         figure_or_ax_handle: Optional[Union[plt.Axes, plt.Figure]] = None,
         image_process_func: Callable = lambda im: im,
+        fast_render: bool = False,
     ):
         """
         Args:
@@ -94,6 +95,17 @@ class VideoBrowser(GenericBrowser):
             titlefunc (Optional[Callable]): Function to generate the title for the plot.
             figure_or_ax_handle (Optional[Union[plt.Axes, plt.Figure]]): Handle to the figure or axis.
             image_process_func (Callable): Function to process the image.
+            fast_render (bool): If True, render the video frame and any
+                annotation scatter overlays Qt-native (QGraphicsView +
+                QPixmapItem) instead of through matplotlib's imshow.
+                Bypasses the canvas pixmap-upload cost that dominates
+                per-frame budget on QtAgg (see BENCHMARKING.md probe 13
+                / 14 for the architecture rationale). Requires a Qt
+                matplotlib backend; silently falls back to Tier 1 if
+                no Qt window is found. In fast_render mode, user
+                additions to ``_ax_image`` via mpl plotting calls are
+                NOT supported (the image region is no longer an mpl
+                Axes); ``_ax`` and ``_im`` are set to ``None``.
         """
         assert isinstance(figure_or_ax_handle, (plt.Axes, plt.Figure, type(None)))
         if isinstance(figure_or_ax_handle, plt.Axes):
@@ -116,13 +128,30 @@ class VideoBrowser(GenericBrowser):
         with open(vid_name, "rb") as f:
             self.data = VideoReader(f)
 
-        if ax_handle is None:
-            self._ax = self.figure.subplots(1, 1)
+        self._image_pane = None
+        if fast_render:
+            from ._qt import make_image_pane
+            self._image_pane = make_image_pane(self.figure)
+            if self._image_pane is None:
+                # No Qt window -> degrade to Tier 1 rather than crash on a
+                # non-Qt backend. Tests run on Agg.
+                fast_render = False
+        self._fast_render = fast_render
+
+        if fast_render:
+            # Image region is Qt-native; matplotlib has no Axes for it.
+            # Subclasses that read ``_ax`` or ``_im`` must guard, see
+            # VideoPointAnnotator's Tier 2 wiring.
+            self._ax = self._image_pane
+            self._im = None
         else:
-            assert isinstance(ax_handle, plt.Axes)
-            self._ax = ax_handle
-        self._im = self._ax.imshow(self.data[0].asnumpy())
-        self._ax.axis("off")
+            if ax_handle is None:
+                self._ax = self.figure.subplots(1, 1)
+            else:
+                assert isinstance(ax_handle, plt.Axes)
+                self._ax = ax_handle
+            self._im = self._ax.imshow(self.data[0].asnumpy())
+            self._ax.axis("off")
 
         self.fps = self.data.get_avg_fps()
         if titlefunc is None:
@@ -162,10 +191,15 @@ class VideoBrowser(GenericBrowser):
 
     def update(self) -> None:
         """Update the video frame."""
-        self._im.set_data(
-            self.image_process_func(self.data[self._current_idx].asnumpy())
+        processed = self.image_process_func(
+            self.data[self._current_idx].asnumpy()
         )
-        self._ax.set_title(self.titlefunc(self))
+        if self._fast_render:
+            self._image_pane.set_image(processed)
+            self._image_pane.set_title(self.titlefunc(self))
+        else:
+            self._im.set_data(processed)
+            self._ax.set_title(self.titlefunc(self))
         super().update()
         plt.draw()
 
