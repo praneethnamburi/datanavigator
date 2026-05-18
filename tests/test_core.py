@@ -13,6 +13,162 @@ def test_browser_initialization():
     GenericBrowser(figure_handle=plt.figure())
 
 
+def test_case_insensitive_key_dispatch_fallback():
+    """When mpl emits an uppercase single letter that isn't explicitly bound,
+    dispatch falls back to the lowercase variant. Fixes the Sticky-Keys /
+    Caps Lock / accidental-shift class of "binding fired silently" bugs.
+    """
+    b = GenericBrowser(figure_handle=plt.figure())
+    fired = {"t_lower": 0, "t_upper": 0}
+
+    def on_t():
+        fired["t_lower"] += 1
+
+    def on_T():
+        fired["t_upper"] += 1
+
+    # Only the lowercase is bound; uppercase should fall back to it.
+    b.add_key_binding("t", on_t)
+
+    # Direct match.
+    event = simulate_key_press(b.figure, key="t")
+    b(event)
+    assert fired["t_lower"] == 1, "plain t didn't fire 't' binding"
+
+    # Uppercase (Shift+t or Caps Lock-modified t) falls back.
+    event = simulate_key_press(b.figure, key="T")
+    b(event)
+    assert fired["t_lower"] == 2, "Shift+T didn't fall back to 't' binding"
+
+    # Explicit uppercase binding takes precedence over the fallback.
+    b.add_key_binding("T", on_T)
+    event = simulate_key_press(b.figure, key="T")
+    b(event)
+    assert fired["t_upper"] == 1
+    assert fired["t_lower"] == 2, "lowercase shouldn't fire when 'T' is bound"
+
+    # Lowercase still works independently.
+    event = simulate_key_press(b.figure, key="t")
+    b(event)
+    assert fired["t_lower"] == 3
+    assert fired["t_upper"] == 1
+
+
+def test_shift_letter_is_uppercase_not_prefixed():
+    """matplotlib reports shift+<letter> as the uppercase letter, NOT as
+    'shift+t'. shift+<arrow> is reported with the 'shift+' prefix. The
+    Phase 4i guard preserves both conventions: independent t / T
+    bindings work as expected for shift+letter; shift+arrow bindings
+    work via direct match on their literal string.
+
+    This test documents the contract for anyone wondering "how do I bind
+    shift+t to a different action than t?": bind 'T', not 'shift+t'.
+    """
+    b = GenericBrowser(figure_handle=plt.figure())
+    log = []
+    b.add_key_binding("t", lambda: log.append("t"))
+    b.add_key_binding("T", lambda: log.append("T"))
+    b.add_key_binding("shift+left", lambda: log.append("shift+left"))
+    b.add_key_binding("left", lambda: log.append("left"))
+
+    # Pressing plain t fires 't'.
+    b(simulate_key_press(b.figure, key="t"))
+    # Pressing Shift+t (mpl emits 'T') fires 'T', NOT fallback to 't'.
+    b(simulate_key_press(b.figure, key="T"))
+    # Pressing Shift+left (mpl emits 'shift+left') fires 'shift+left'.
+    b(simulate_key_press(b.figure, key="shift+left"))
+    # Pressing plain left fires 'left'.
+    b(simulate_key_press(b.figure, key="left"))
+
+    assert log == ["t", "T", "shift+left", "left"], (
+        f"expected ['t', 'T', 'shift+left', 'left'], got {log}"
+    )
+
+
+def test_case_insensitive_fallback_doesnt_affect_special_keys():
+    """The fallback applies only to single alphabetic letters. shift+left,
+    ctrl+c, etc. are unaffected (they're multi-character keys that mpl
+    emits as-is).
+    """
+    b = GenericBrowser(figure_handle=plt.figure())
+
+    fired_decrement = []
+    fired_decrement_frac = []
+    b._keypressdict["left"] = (lambda: fired_decrement.append(1), "decrement")
+    b._keypressdict["shift+left"] = (
+        lambda: fired_decrement_frac.append(1), "decrement frac"
+    )
+
+    # Pressing 'left' fires 'left' only, not 'shift+left'.
+    event = simulate_key_press(b.figure, key="left")
+    b(event)
+    assert len(fired_decrement) == 1
+    assert len(fired_decrement_frac) == 0
+
+    # Pressing 'shift+left' fires 'shift+left' only.
+    event = simulate_key_press(b.figure, key="shift+left")
+    b(event)
+    assert len(fired_decrement) == 1
+    assert len(fired_decrement_frac) == 1
+
+
+def test_buttons_add_separator_mpl_path():
+    """Buttons.add_separator() under Agg adds an invisible spacer button.
+
+    The spacer takes a layout slot so the next add() is pushed down,
+    matching today's DUSTrack hand-rolled-spacer behavior.
+    """
+    from datanavigator.assets import Button
+    b = GenericBrowser(figure_handle=plt.figure())
+    b.buttons.add(text="first")
+    n_before_sep = len(b.buttons)
+    b.buttons.add_separator()
+    n_after_sep = len(b.buttons)
+    assert n_after_sep == n_before_sep + 1, "separator should occupy a slot"
+    # The spacer is a Button (mpl path) with an auto-generated name and
+    # its visible bits switched off.
+    spacer = b.buttons._list[-1]
+    assert isinstance(spacer, Button)
+    assert spacer.name.startswith("__separator_")
+    assert spacer.ax.patch.get_visible() is False
+    assert spacer.label.get_visible() is False
+    # And add_separator() returns None on both paths.
+    assert b.buttons.add_separator() is None
+
+
+def test_buttons_use_mpl_path_under_agg():
+    """Soft Qt mode: under Agg, Buttons.add returns mpl widgets, not Qt wrappers.
+
+    The Qt-path classes are named _QtPushButton / _QtToggleButton (private)
+    and only appear when the parent's figure is on a Qt canvas. Under the
+    Agg backend the test suite uses, the returned objects are the public
+    mpl-inheriting Button / ToggleButton from assets.py.
+    """
+    from datanavigator.assets import Button, ToggleButton
+    assert mpl.get_backend().lower() == "agg"
+    b = GenericBrowser(figure_handle=plt.figure())
+    push = b.buttons.add(text="push")
+    toggle = b.buttons.add(text="toggle", type_="Toggle")
+    assert isinstance(push, Button)
+    assert isinstance(toggle, ToggleButton)
+    assert not type(push).__name__.startswith("_Qt")
+    assert not type(toggle).__name__.startswith("_Qt")
+
+
+def test_qt_window_is_none_under_agg():
+    """Soft Qt mode: on the Agg backend the test suite uses, _qt_window is None.
+
+    Phase 1 of the 1.4.0 refactor exposes ``self._qt_window``: the
+    QMainWindow matplotlib builds around the figure under QtAgg, or None
+    on any non-Qt backend. The formal pytest suite runs on Agg (see
+    conftest.py), so the discovery helper must return None here. The
+    QtAgg path is exercised by tests/qt_learning/03_phase1_smoke.py.
+    """
+    assert mpl.get_backend().lower() == "agg"
+    b = GenericBrowser(figure_handle=plt.figure())
+    assert b._qt_window is None
+
+
 class TestGenericBrowser:
     @pytest.fixture
     def browser(self, matplotlib_figure):

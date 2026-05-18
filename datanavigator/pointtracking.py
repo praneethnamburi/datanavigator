@@ -58,12 +58,34 @@ class VideoPointAnnotator(VideoBrowser):
         titlefunc: Callable = None,
         image_process_func: Callable = lambda im: im,
         height_ratios: tuple = (10, 1, 1),  # depends on your screen size
+        fast_render: bool = False,
     ) -> None:
-        figure_handle = plt.figure(constrained_layout=True, figsize=(12, 8))
-        gs = figure_handle.add_gridspec(3, 2, width_ratios=[1, 4], height_ratios=list(height_ratios))
-        self._ax_image = figure_handle.add_subplot(gs[0, 1])
-        self._ax_trace_x = figure_handle.add_subplot(gs[1, :])
-        self._ax_trace_y = figure_handle.add_subplot(gs[2, :])
+        if fast_render:
+            # Tier 2: image lives in a Qt widget above the canvas, so
+            # the mpl figure only needs the trace rows. A smaller
+            # figure (matched to the trace region) keeps the canvas
+            # widget small so its per-frame raster + upload cost stays
+            # near probe 13's ~5 ms prediction instead of inheriting
+            # the full 12x8 figure's raster cost. Skip
+            # constrained_layout (probe-14 finding) -- the layout
+            # solver re-runs on every canvas.draw() and adds ~30 ms
+            # for trace-only figures, dwarfing the actual raster cost.
+            figure_handle = plt.figure(constrained_layout=False, figsize=(12, 3))
+            gs = figure_handle.add_gridspec(2, 1, hspace=0.05)
+            figure_handle.subplots_adjust(
+                left=0.06, right=0.99, top=0.97, bottom=0.12, hspace=0.05,
+            )
+            self._ax_image = None  # set after super().__init__ to the Qt pane
+            self._ax_trace_x = figure_handle.add_subplot(gs[0, 0])
+            self._ax_trace_y = figure_handle.add_subplot(gs[1, 0])
+        else:
+            figure_handle = plt.figure(constrained_layout=True, figsize=(12, 8))
+            gs = figure_handle.add_gridspec(
+                3, 2, width_ratios=[1, 4], height_ratios=list(height_ratios)
+            )
+            self._ax_image = figure_handle.add_subplot(gs[0, 1])
+            self._ax_trace_x = figure_handle.add_subplot(gs[1, :])
+            self._ax_trace_y = figure_handle.add_subplot(gs[2, :])
         self._ax_trace_x.sharex(self._ax_trace_y)
         (self._frame_marker_x,) = self._ax_trace_x.plot(
             [], [], color="black", linewidth=1
@@ -71,7 +93,18 @@ class VideoPointAnnotator(VideoBrowser):
         (self._frame_marker_y,) = self._ax_trace_y.plot(
             [], [], color="black", linewidth=1
         )
-        super().__init__(vid_name, titlefunc, self._ax_image, image_process_func)
+        # Tier 1 passes the image axis; Tier 2 passes the figure so
+        # VideoBrowser can build the Qt image pane on it.
+        ax_or_fig = figure_handle if fast_render else self._ax_image
+        super().__init__(
+            vid_name, titlefunc, ax_or_fig, image_process_func,
+            fast_render=fast_render,
+        )
+        if fast_render:
+            # super() has built and stashed self._image_pane; mirror it
+            # as self._ax_image so existing identity checks
+            # (event.inaxes == self._ax_image) still fire.
+            self._ax_image = self._image_pane
         self.memoryslots.hide()
         self.memoryslots.disable()
 
@@ -99,25 +132,56 @@ class VideoPointAnnotator(VideoBrowser):
         self.statevariables["label_range"].set_state(int(first_label) // 10)
         self.update_annotation_label_states()
         self.statevariables.add("number_keys", ["select", "place"])
-        self._ax_statevar = figure_handle.add_subplot(gs[0, 0])
-        self.statevariables.show(pos="middle left", fax=self._ax_statevar)
+        if self._fast_render:
+            # Tier 2: bypass the canvas-overlay TextView entirely --
+            # route directly into the layout-managed sidebar QLabel on
+            # the image pane. The sidebar's width auto-grows with
+            # content (setSizePolicy(Fixed, Preferred)), so a long
+            # annotation-layer name reflows the layout and shrinks
+            # the canvas instead of drawing over the trace plots.
+            from datanavigator._qt import make_sidebar_text_sink
+            self._ax_statevar = None
+            sink = make_sidebar_text_sink(self._image_pane)
+            if sink is not None:
+                self.statevariables._text = sink
+                self.statevariables.update_display(draw=False)
+            else:
+                # Sidebar missing (pane built by older make_image_pane)
+                # -- fall back to canvas-overlay path so we still show
+                # something rather than crashing on _text=None.
+                self.statevariables.show(pos="middle left", fax=figure_handle)
+        else:
+            self._ax_statevar = figure_handle.add_subplot(gs[0, 0])
+            self.statevariables.show(pos="middle left", fax=self._ax_statevar)
 
         self.add_events()
 
         self.set_key_bindings()
 
         # set mouse click behavior
-        self.cid.append(
-            self.figure.canvas.mpl_connect("pick_event", self.select_label_with_mouse)
-        )
-        self.cid.append(
-            self.figure.canvas.mpl_connect(
-                "button_press_event", self.place_label_with_mouse
+        if self._fast_render:
+            # Image pane is Qt-native: pick + place_label events on
+            # the image come through the _QtPickAdapter, not mpl's
+            # canvas signal chain. go_to_frame stays on mpl because
+            # the trace axes still live in matplotlib.
+            adapter = self._image_pane.install_pick_adapter()
+            adapter.connect_pick(self.select_label_with_mouse)
+            adapter.connect_button_press(self.place_label_with_mouse)
+            self.cid.append(
+                self.figure.canvas.mpl_connect("button_press_event", self.go_to_frame)
             )
-        )
-        self.cid.append(
-            self.figure.canvas.mpl_connect("button_press_event", self.go_to_frame)
-        )
+        else:
+            self.cid.append(
+                self.figure.canvas.mpl_connect("pick_event", self.select_label_with_mouse)
+            )
+            self.cid.append(
+                self.figure.canvas.mpl_connect(
+                    "button_press_event", self.place_label_with_mouse
+                )
+            )
+            self.cid.append(
+                self.figure.canvas.mpl_connect("button_press_event", self.go_to_frame)
+            )
 
         if self.__class__.__name__ == "VideoPointAnnotator":
             plt.show(block=False)
@@ -165,11 +229,20 @@ class VideoPointAnnotator(VideoBrowser):
             }
 
         for name, fname in ann_name_fname.items():
+            # Tier 1: scatter target is the mpl image axis. Tier 2:
+            # scatter target is a fresh Qt marker group on the image
+            # pane, wrapped by _QtScatterArtist downstream. The
+            # VideoAnnotation factory branches on the type of the
+            # element in ax_list_scatter.
+            if self._fast_render:
+                ax_list_scatter = [self._image_pane.add_marker_group()]
+            else:
+                ax_list_scatter = [self._ax_image]
             self.annotations.add(
                 name=name,
                 fname=fname,
                 vname=self.fname,
-                ax_list_scatter=[self._ax_image],
+                ax_list_scatter=ax_list_scatter,
                 ax_list_trace_x=[self._ax_trace_x],
                 ax_list_trace_y=[self._ax_trace_y],
                 palette_name="Set2",
@@ -308,6 +381,23 @@ class VideoPointAnnotator(VideoBrowser):
 
         self.remove_key_binding("e")  # remove the "Extract clip" feature from VideoBrowser
 
+        if self._fast_render:
+            # Overwrite the inherited 'r' binding (GenericBrowser.reset_axes)
+            # so a single keystroke resets BOTH the trace axes AND the
+            # Tier-2 image-pane zoom/pan, matching the pre-1.5.0
+            # matplotlib UX where 'r' was the catch-all "give me my view
+            # back" key. Tier 1 keeps the inherited binding (no image
+            # zoom to reset).
+            self.add_key_binding(
+                "r", self._reset_view_all, "Reset image zoom + trace axes"
+            )
+
+    def _reset_view_all(self, event: Any | None = None) -> None:
+        """Reset both the Qt image pane (zoom/pan -> fit) and the
+        matplotlib trace axes (`reset_axes("both")`)."""
+        self._image_pane.reset_view()
+        self.reset_axes(axis="both", event=event)
+
     def add_events(self) -> None:
         """Add an event to specify time intervals for interpolating with lucas-kanade."""
         event_name = "interp_with_lk"
@@ -364,8 +454,55 @@ class VideoPointAnnotator(VideoBrowser):
             + suffix,
         )
 
+    def set_image_background_color(self, color: Any) -> None:
+        """Set the background color of the image region.
+
+        Tier 1 routes to ``self._ax_image.set_facecolor`` (matplotlib);
+        Tier 2 routes to the Qt image pane's
+        ``set_background_color``. The single-method surface lets
+        consumers (DUSTrack's ``_apply_dark_theme``) issue one call
+        regardless of which tier is active.
+        """
+        if self._fast_render:
+            self._image_pane.set_background_color(color)
+        else:
+            self._ax_image.set_facecolor(color)
+
+    def _patch_event_for_image_pane(self, event: Any) -> None:
+        """When a key press fires with cursor over the Qt image pane,
+        patch the event so ``event.inaxes == self._ax_image`` and
+        ``xdata`` / ``ydata`` reflect the scene-space cursor position.
+
+        Without this, Tier 2 silently drops the "press T over the
+        video to add a label here" workflow because mpl reports
+        ``inaxes=None`` whenever the cursor is outside its canvas
+        widget -- which is *always* the case when hovering the Qt
+        image pane.
+        """
+        if not getattr(self, "_fast_render", False):
+            return
+        if event.name != "key_press_event":
+            return
+        if getattr(event, "inaxes", None) is not None:
+            return
+        pane = self._image_pane
+        if pane is None or not pane.underMouse():
+            return
+        try:
+            from qtpy.QtGui import QCursor
+        except ImportError:
+            return
+        view = pane._view
+        viewport = view.viewport()
+        local = viewport.mapFromGlobal(QCursor.pos())
+        scene_pos = view.mapToScene(local)
+        event.inaxes = pane
+        event.xdata = float(scene_pos.x())
+        event.ydata = float(scene_pos.y())
+
     def __call__(self, event: Any) -> None:
         """Callbacks for number keys."""
+        self._patch_event_for_image_pane(event)
         super().__call__(event)
         # if a number key is pressed
         if event.name == "key_press_event" and str(event.key).isdigit() and int(event.key) in range(10):
@@ -416,7 +553,15 @@ class VideoPointAnnotator(VideoBrowser):
                 ann.hide(draw=draw)
 
     def update_frame_marker(self, draw: bool = False) -> None:
-        """Update the current frame location in the trace plots."""
+        """Update the current frame location in the trace plots.
+
+        The trace ylim / FOI tick positions are a pure function of the
+        active label + per-annotation contents + frames_of_interest, none
+        of which change when only ``_current_idx`` moves. Cache them
+        keyed on a cheap tuple of (label, annotation revisions,
+        frames_of_interest) so per-frame navigation only does the
+        frame-marker set_data calls.
+        """
 
         def nanlim(x, default):
             if np.all(np.isnan(x)):
@@ -432,26 +577,38 @@ class VideoPointAnnotator(VideoBrowser):
             m = (nmin + nmax) / 2
             return [(nmin - m) * scale + m, (nmax - m) * scale + m]
 
-        trace_data_x, trace_data_y = np.hstack(
-            [ann.to_trace(self._current_label).T for ann in self.annotations._list]
+        cache_key = (
+            self._current_label,
+            tuple(ann._revision for ann in self.annotations._list),
+            tuple(self.frames_of_interest),
         )
+        cached = getattr(self, "_frame_marker_cache", None)
+        if cached is None or cached[0] != cache_key:
+            trace_data_x, trace_data_y = np.hstack(
+                [ann.to_trace(self._current_label).T for ann in self.annotations._list]
+            )
 
-        default_x, default_y = self._ax_trace_x.get_ylim(), self._ax_trace_y.get_ylim()
-        xl, yl = nanlim(trace_data_x, default_x), nanlim(trace_data_y, default_y)
-        xls, yls = nanlim_small(trace_data_x, default_x), nanlim_small(trace_data_y, default_y)
+            default_x, default_y = self._ax_trace_x.get_ylim(), self._ax_trace_y.get_ylim()
+            xl, yl = nanlim(trace_data_x, default_x), nanlim(trace_data_y, default_y)
+            xls, yls = nanlim_small(trace_data_x, default_x), nanlim_small(trace_data_y, default_y)
+
+            self._plot_frames_of_interest_x.set_data(
+                *utils.ticks_from_times(self.frames_of_interest, xl)
+            )
+            self._plot_frames_of_interest_y.set_data(
+                *utils.ticks_from_times(self.frames_of_interest, yl)
+            )
+            if not np.any(np.isnan(xl)):
+                self._ax_trace_x.set_ylim(xl)
+                self._ax_trace_y.set_ylim(yl)
+
+            self._frame_marker_cache = (cache_key, xls, yls)
+        else:
+            _, xls, yls = cached
 
         self._frame_marker_x.set_data([self._current_idx] * 2, xls)
         self._frame_marker_y.set_data([self._current_idx] * 2, yls)
 
-        self._plot_frames_of_interest_x.set_data(
-            *utils.ticks_from_times(self.frames_of_interest, xl)
-        )
-        self._plot_frames_of_interest_y.set_data(
-            *utils.ticks_from_times(self.frames_of_interest, yl)
-        )
-        if not np.any(np.isnan(xl)):
-            self._ax_trace_x.set_ylim(xl)
-            self._ax_trace_y.set_ylim(yl)
         if draw:
             plt.draw()
 
@@ -981,6 +1138,12 @@ class VideoAnnotation:
             "ax_list_trace_y": kwargs.pop("ax_list_trace_y", []),
         }
         self._plot_type = "dot" # line or dot
+        # Bumped on every mutation of self.data. Consumers (e.g.
+        # VideoPointAnnotator.update_frame_marker) read this to invalidate
+        # caches keyed on per-label trace contents. Over-invalidates on
+        # ordering-only changes (sort_labels / sort_data); under-invalidates
+        # would be a correctness bug.
+        self._revision = 0
         self.setup_display()
 
     @classmethod
@@ -1269,13 +1432,15 @@ class VideoAnnotation:
     def sort_labels(self) -> None:
         """Sort labels in the data dictionary."""
         self.data = dict(sorted(self.data.items(), key=lambda item: int(item[0])))
+        self._revision += 1
 
     def sort_data(self) -> None:
         """Sort annotations by the frame numbers."""
         self.data = {
             label: dict(sorted(self.data[label].items())) for label in self.labels
         }
-    
+        self._revision += 1
+
     def clip_trailing_empty_labels(self) -> None:
         """Remove trailing empty labels from the annotation dictionary."""
         n_labeled_frames = [len(self.data[label]) for label in self.labels]
@@ -1285,14 +1450,16 @@ class VideoAnnotation:
                 if lst[i] != 0:
                     return i
             return 0  # or raise an exception if needed
-        
+
         last_index = last_nonzero_index(n_labeled_frames)
 
         self.data = {label: self.data[label] for idx, label in enumerate(self.labels) if idx <= last_index}
-    
+        self._revision += 1
+
     def remove_empty_labels(self) -> None:
         """Remove empty labels from the annotation dictionary."""
         self.data = {label: self.data[label] for label in self.labels if len(self.data[label]) > 0}
+        self._revision += 1
 
     def get_values_cv(self, frame_num: int) -> np.ndarray:
         """Return annotations at frame_num in a format for openCV's optical flow algorithms"""
@@ -1317,6 +1484,7 @@ class VideoAnnotation:
         assert values.shape == (self.n_annotations, 2)
         for label, value in zip(self.labels, values):
             self.data[label][frame_num] = list(value)
+        self._revision += 1
 
     def get_at_frame(self, frame_num: int) -> list[list[float]]:
         """Retrieve annotations at a given frame number. If an annotation is not present, nan values will be used."""
@@ -1496,7 +1664,7 @@ class VideoAnnotation:
         assert all([0 <= x <= 1 for x in color])
 
         self.data[label] = {}
-        self.sort_labels()
+        self.sort_labels()  # bumps _revision
 
         self.re_setup_display()
 
@@ -1506,39 +1674,77 @@ class VideoAnnotation:
         """Add a point annotation (location) of a given label at a frame number."""
         assert len(location) == 2
         self.data[label][frame_number] = list(location)
+        self._revision += 1
 
     def remove(self, label: str, frame_number: int) -> None:
         """Remove a point annotation of a given label at a frame number."""
         assert label in self.labels
         self.data[label].pop(frame_number, None)
+        self._revision += 1
 
     # display management
     def _process_ax_list(
-        self, ax_list: None | plt.Axes | list[plt.Axes], type_: str
-    ) -> list[plt.Axes]:
-        """Process the list of axes for scatter or trace plots."""
+        self, ax_list, type_: str
+    ) -> list:
+        """Process the list of axes (or Tier-2 scatter targets) for plots.
+
+        The trace-axis types must still be mpl axes -- traces remain
+        matplotlib in Tier 2. ``scatter`` may also be a Qt marker
+        group (``QGraphicsItemGroup``) when ``fast_render=True``; the
+        actual scatter rendering then routes through
+        :class:`_QtScatterArtist`.
+        """
         assert type_ in ("scatter", "trace_x", "trace_y")
         if ax_list is None:
             ax_list = self.plot_handles[f"ax_list_{type_}"]
         if isinstance(ax_list, plt.Axes):
             ax_list = [ax_list]
-        assert all([isinstance(ax, plt.Axes) for ax in ax_list])
+        elif not isinstance(ax_list, (list, tuple)):
+            # Single Qt marker group (or any non-Axes / non-list
+            # object) -> wrap in a list. The setup_display_scatter
+            # branch validates the actual type below.
+            ax_list = [ax_list]
+        if type_ in ("trace_x", "trace_y"):
+            assert all([isinstance(ax, plt.Axes) for ax in ax_list])
         self.plot_handles[f"ax_list_{type_}"] = ax_list
         return ax_list
 
     def setup_display_scatter(
-        self, ax_list_scatter: None | plt.Axes | list[plt.Axes] = None,
+        self, ax_list_scatter=None,
     ) -> None:
-        """Setup scatter plot display."""
+        """Setup scatter plot display.
+
+        Each entry in ``ax_list_scatter`` is either:
+        - a matplotlib ``Axes`` (Tier 1) -- a ``PathCollection`` is
+          created via ``ax.scatter`` and stashed in ``plot_handles``;
+        - a Qt ``QGraphicsItemGroup`` (Tier 2) -- a
+          :class:`datanavigator._qt._QtScatterArtist` is built on the
+          group and stashed instead. Both expose the same
+          mpl-PathCollection-shaped API consumed downstream.
+        """
         ax_list_scatter = self._process_ax_list(ax_list_scatter, "scatter")
         palette = self.palette
 
         # instead of len(self.labels) to keep all 10 points, some of them can be nan
         dummy_xy = [np.nan] * len(palette)
         for ax_cnt, ax in enumerate(ax_list_scatter):
-            self.plot_handles[f"labels_in_ax{ax_cnt}"] = ax.scatter(
-                dummy_xy, dummy_xy, color=palette, picker=5
-            )
+            if isinstance(ax, plt.Axes):
+                handle = ax.scatter(
+                    dummy_xy, dummy_xy, color=palette, picker=5
+                )
+            else:
+                # Qt marker group -> _QtScatterArtist facade.
+                # The marker group carries a back-reference to the
+                # _QtImagePane (set by add_marker_group); passing it
+                # lets the artist register for pick-adapter
+                # hit-testing.
+                from datanavigator._qt import _make_qt_scatter_artist_class
+                scatter_cls = _make_qt_scatter_artist_class()
+                image_pane = getattr(ax, "_image_pane", None)
+                handle = scatter_cls(
+                    ax, palette, picker_radius=5.0, image_pane=image_pane,
+                )
+            self.plot_handles[f"labels_in_ax{ax_cnt}"] = handle
 
     def setup_display_trace(
         self,
@@ -1603,6 +1809,10 @@ class VideoAnnotation:
             ax_list_trace_x=self.plot_handles["ax_list_trace_x"],
             ax_list_trace_y=self.plot_handles["ax_list_trace_y"],
         )
+        # Fresh plot_handles -> the cache key from the prior handles is
+        # stale. Invalidate so the next update_display_trace populates
+        # the new artists with their ydata.
+        self._trace_display_cache_key = None
 
     def update_display_scatter(self, frame_number: int, draw: bool = False) -> None:
         """Update scatter plot display."""
@@ -1617,19 +1827,28 @@ class VideoAnnotation:
     def update_display_trace(
         self, label: str | None = None, draw: bool = False
     ) -> None:
-        """Update trace plot display."""
+        """Update trace plot display.
+
+        Trace contents are a pure function of (label_list, self.data);
+        none of that changes when only the parent's ``_current_idx``
+        moves. Cache on (label_list, self._revision) so per-frame
+        navigation skips the to_trace / set_ydata sweep entirely.
+        """
         if label is None:
             label_list = self.labels
         else:
             assert label in self.labels
             label_list = [label]
 
-        for ax_cnt in range(len(self.plot_handles["ax_list_trace_x"])):
-            for label in label_list:
-                trace = self.to_trace(label)
-                for coord_cnt, coord in enumerate(("x", "y")):
-                    handle_name = f"trace_in_ax{coord}{ax_cnt}_label{label}"
-                    self.plot_handles[handle_name].set_ydata(trace[:, coord_cnt])
+        cache_key = (tuple(label_list), self._revision)
+        if getattr(self, "_trace_display_cache_key", None) != cache_key:
+            for ax_cnt in range(len(self.plot_handles["ax_list_trace_x"])):
+                for label in label_list:
+                    trace = self.to_trace(label)
+                    for coord_cnt, coord in enumerate(("x", "y")):
+                        handle_name = f"trace_in_ax{coord}{ax_cnt}_label{label}"
+                        self.plot_handles[handle_name].set_ydata(trace[:, coord_cnt])
+            self._trace_display_cache_key = cache_key
 
         if draw:
             plt.draw()
@@ -1743,6 +1962,7 @@ class VideoAnnotation:
                 for k, v in self.data[label].items()
                 if start_frame <= k <= end_frame
             }
+        self._revision += 1
 
     def keep_overlapping_continuous_frames(self) -> None:
         """Keep data from consecutive frames that have all labels."""
@@ -1759,6 +1979,7 @@ class VideoAnnotation:
             self.data[label] = {
                 k: v for k, v in self.data[label].items() if k in frames_to_keep
             }
+        self._revision += 1
 
     def get_area(
         self, labels: list[str] | str, lowpass: float | None = None

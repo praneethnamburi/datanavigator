@@ -17,6 +17,7 @@ from matplotlib import axes as maxes
 from matplotlib import pyplot as plt
 
 from . import utils
+from ._qt import find_qt_window
 from .assets import Buttons, MemorySlots, Selectors, StateVariables
 from .events import Events
 
@@ -54,6 +55,12 @@ class GenericBrowser:
             figure_handle = plt.figure()
         assert isinstance(figure_handle, plt.Figure)
         self.figure = figure_handle
+        # Soft Qt mode (1.4.0): if matplotlib is on a Qt backend, hold a
+        # reference to the QMainWindow it built around this figure. Phase 2+
+        # widget migrations attach native Qt widgets to it; under non-Qt
+        # backends (Agg, TkAgg, inline) this is None and the asset managers
+        # fall back to their pre-1.4 mpl-axes-based rendering.
+        self._qt_window = find_qt_window(figure_handle)
         self._keypressdict = {}  # managed by add_key_binding
         self._bindings_removed = {}
 
@@ -124,8 +131,9 @@ class GenericBrowser:
             event: Event to handle.
         """
         if event.name == "key_press_event":
-            if event.key in self._keypressdict:
-                f = self._keypressdict[event.key][0]
+            key = self._resolve_keypress(event.key)
+            if key is not None:
+                f = self._keypressdict[key][0]
                 argspec = inspect.getfullargspec(f)[0]
                 if len(argspec) == 2 and argspec[1] == "event":
                     f(event)
@@ -135,6 +143,31 @@ class GenericBrowser:
                 self.memoryslots.update(event.key)
         elif event.name == "close_event":  # perform cleanup
             self.cleanup()
+
+    def _resolve_keypress(self, key):
+        """Look up a key in ``self._keypressdict`` with a case-insensitive
+        fallback for single-letter keys.
+
+        matplotlib reports keys as uppercase when Shift is held (or
+        Sticky Keys is active, or the user inadvertently holds shift).
+        For DUSTrack-shaped workflows, a user pressing what they think
+        is plain ``t`` while Shift is held would get mpl ``'T'``, which
+        wouldn't match the ``'t'`` binding -- silent no-op. To avoid
+        that surprise, single uppercase letters that aren't explicitly
+        bound fall through to the lowercase variant. Explicit uppercase
+        bindings (or multi-character bindings like ``'shift+left'``)
+        take precedence and aren't affected.
+
+        Returns the resolved key string (a key into _keypressdict) or
+        None if no binding matches.
+        """
+        if key in self._keypressdict:
+            return key
+        if isinstance(key, str) and len(key) == 1 and key.isalpha() and key.isupper():
+            lower = key.lower()
+            if lower in self._keypressdict:
+                return lower
+        return None
 
     def cleanup(self):
         """Perform cleanup, for example, when the figure is closed."""
@@ -306,13 +339,20 @@ class GenericBrowser:
     def copy_to_clipboard(self):
         """
         Copy the current figure to the clipboard.
-        Requires PySide2. Install this optionally after the environment is set up as it can cause problems, or live without this feature.
+
+        Requires a Qt binding (PyQt5 / PyQt6 / PySide2 / PySide6); imported
+        lazily via ``qtpy`` so installs without Qt still get the rest of
+        the package. ``pip install datanavigator[qt]`` pulls PyQt6.
         """
-        from PySide2.QtGui import QClipboard, QImage
+        from qtpy.QtGui import QImage
+        from qtpy.QtWidgets import QApplication
 
         buf = io.BytesIO()
         self.figure.savefig(buf)
-        QClipboard().setImage(QImage.fromData(buf.getvalue()))
+        # Use the QApplication singleton clipboard. Direct QClipboard()
+        # instantiation worked on Qt5 but is disallowed on Qt6.
+        app = QApplication.instance() or QApplication([])
+        app.clipboard().setImage(QImage.fromData(buf.getvalue()))
         buf.close()
 
     def show_key_bindings(self, f: str = None, pos: str = "bottom right"):

@@ -12,6 +12,7 @@ dependencies:
   - ffmpeg-python
   - pytables>=3.10
   - tqdm
+  - qtpy>=2.4
   - pytest
   - pip:
     - opencv-python

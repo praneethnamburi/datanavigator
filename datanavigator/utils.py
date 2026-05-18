@@ -176,7 +176,18 @@ def _parse_pos(
 
 
 class TextView:
-    """Show text array line by line."""
+    """Show text array line by line.
+
+    Phase 2 of the 1.4.0 Qt refactor (soft mode): when ``fax`` resolves to
+    a figure whose canvas is a matplotlib Qt canvas, the text renders as a
+    native QLabel overlay parented to the canvas (``self._overlay`` set,
+    ``self._text`` stays None). On every other backend the original
+    ``Axes.text`` path runs unchanged (``self._overlay`` is None,
+    ``self._text`` is the mpl Text artist).
+
+    The public surface (``__init__`` signature, ``.text``, ``.update``)
+    is identical across both paths.
+    """
 
     def __init__(
         self,
@@ -195,11 +206,45 @@ class TextView:
             return (1 - 2 * margin) * xy + margin
 
         self.text = self.parse_text(text)
-        self._text = None  # matplotlib text object
+        self._text = None  # matplotlib Text artist (set only on the mpl path)
+        self._overlay = None  # QtTextOverlay (set only on the Qt path)
         self._pos = _parse_pos(pos)
-        self.figure, self._ax = _parse_fax(
-            fax, ax_pos=(rescale(self._pos[0]), rescale(self._pos[1]), 0.02, 0.02)
-        )
+
+        # Caller-supplied Axes: respect placement, stay on the mpl path.
+        if isinstance(fax, maxes.Axes):
+            self.figure = fax.figure
+            self._ax = fax
+            self.setup()
+            self.update()
+            return
+
+        # Figure or None: resolve the figure, then try the Qt overlay.
+        if fax is None:
+            self.figure = plt.figure()
+        else:
+            self.figure = fax
+
+        from ._qt import make_text_overlay
+        self._overlay = make_text_overlay(self.figure, self._pos, self.text)
+        if self._overlay is not None:
+            # Qt path: the QLabel overlay does the rendering; we deliberately
+            # skip creating a spacer mpl Axes (under Phase 2 we still made
+            # one and left it empty -- it showed up as a blank rectangle in
+            # the figure). DUSTrack hit this with statevariables.
+            self._ax = None
+            # Still call plt.show(block=False) -- the mpl path's setup()
+            # does this, and consumers rely on it. Notably,
+            # GenericBrowser.show_key_bindings("new") creates a fresh
+            # plt.figure() and then a TextView on it; without plt.show
+            # here the new figure never becomes visible. Found by DUSTrack
+            # live probe: sniffer fires on click, new keybind window
+            # never opens.
+            plt.show(block=False)
+            return
+
+        # mpl fallback: create the spacer Axes the Text artist lives on.
+        ax_pos = (rescale(self._pos[0]), rescale(self._pos[1]), 0.02, 0.02)
+        self._ax = self.figure.add_axes(ax_pos)
         self.setup()
         self.update()
 
@@ -229,6 +274,13 @@ class TextView:
         """
         if new_text is not None:
             self.text = self.parse_text(new_text)
+        if self._overlay is not None:
+            # Propagate any post-construction _pos mutation to the overlay,
+            # mirroring the mpl path below (which always re-reads self._pos).
+            # DUSTrack relies on this to move state-variables to "bottom left".
+            self._overlay._pos = self._pos
+            self._overlay.update(self.text)
+            return
         if self._text is not None:
             self._text.remove()
         x, y, va, ha = self._pos

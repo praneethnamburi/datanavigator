@@ -179,7 +179,25 @@ class AssetContainer:
 
 
 class Buttons(AssetContainer):
-    """Manager for buttons in a matplotlib figure or GUI (see GenericBrowser for example)."""
+    """Manager for buttons in a matplotlib figure or GUI (see GenericBrowser for example).
+
+    Phase 3 of the 1.4.0 Qt refactor (soft mode): when the parent's figure
+    is on a Qt canvas AND no explicit ``pos`` is given, ``add()`` builds a
+    native QPushButton in a QToolBar attached to the QMainWindow. On every
+    other backend, or when an explicit ``pos`` is given, the original
+    matplotlib-widgets path runs unchanged. The returned object exposes
+    the same public surface either way (``name``, ``on_clicked``, plus
+    toggle-specific ``state`` / ``toggle`` / ``set_text`` / ``set_state``).
+
+    Lifecycle gotcha: ``Buttons.add()`` reads the figure's canvas at call
+    time. If a Figure subclass adds buttons inside its own ``__init__``
+    (as in :class:`datanavigator.examples.ButtonDemo`), this runs *before*
+    matplotlib attaches a Qt canvas to the figure, so those buttons end
+    up on the mpl path even under QtAgg. The buttons still function;
+    they just miss the Phase 3 perf win. Browsers that take a
+    figure_handle (the common case) are unaffected, because the figure
+    is fully constructed before any button is added.
+    """
 
     def add(
         self,
@@ -198,25 +216,43 @@ class Buttons(AssetContainer):
         If pos is provided, then w, h, and buf will be ignored.
         """
         assert type_ in ("Push", "Toggle")
-        nbtn = len(self)
-        if pos is None:  # start adding at the top left corner
-            parent_fig = self.parent.figure
-            mul_factor = 6.4 / parent_fig.get_size_inches()[0]
 
-            btn_w = w * mul_factor
-            btn_h = h * mul_factor
-            btn_buf = buf
-            pos = (
-                btn_buf,
-                (1 - btn_buf) - ((btn_buf + btn_h) * (nbtn + 1)),
-                btn_w,
-                btn_h,
+        # Try the Qt path first. parent.figure works for both
+        # GenericBrowser-shaped parents and Figure-as-parent (examples.py).
+        # We only Qt-ify the default-position case; an explicit pos is a
+        # request for mpl-style placement, which we can't replicate in a
+        # QToolBar without surprises.
+        b = None
+        if pos is None:
+            from ._qt import make_qt_button
+            parent_fig = self.parent.figure
+            start_state = kwargs.get("start_state", True if type_ == "Toggle" else None)
+            b = make_qt_button(
+                parent_fig, text, type_=type_,
+                start_state=bool(start_state) if start_state is not None else True,
             )
 
-        if type_ == "Toggle":
-            b = ToggleButton(plt.axes(pos), text, **kwargs)
-        else:
-            b = Button(plt.axes(pos), text, **kwargs)
+        if b is None:
+            # mpl fallback (the pre-1.4 path).
+            nbtn = len(self)
+            if pos is None:  # start adding at the top left corner
+                parent_fig = self.parent.figure
+                mul_factor = 6.4 / parent_fig.get_size_inches()[0]
+
+                btn_w = w * mul_factor
+                btn_h = h * mul_factor
+                btn_buf = buf
+                pos = (
+                    btn_buf,
+                    (1 - btn_buf) - ((btn_buf + btn_h) * (nbtn + 1)),
+                    btn_w,
+                    btn_h,
+                )
+
+            if type_ == "Toggle":
+                b = ToggleButton(plt.axes(pos), text, **kwargs)
+            else:
+                b = Button(plt.axes(pos), text, **kwargs)
 
         if action_func is not None:  # more than one can be attached
             if isinstance(action_func, (list, tuple)):
@@ -226,6 +262,49 @@ class Buttons(AssetContainer):
                 b.on_clicked(action_func)
 
         return super().add(b)
+
+    def add_separator(self, name: Optional[str] = None) -> None:
+        """Add a visual group boundary between buttons.
+
+        On the Qt path (figure on a Qt canvas), inserts a
+        ``QToolBar.addSeparator()`` -- a thin line marking a group
+        boundary. On the mpl path, inserts an invisible button that
+        occupies a layout slot so subsequent buttons are pushed down.
+
+        Promoted to a first-class API for downstream consumers (DUSTrack)
+        that previously hand-rolled invisible spacers by mutating
+        :class:`matplotlib.widgets.Button` internals (``.ax``, ``.label``,
+        ``.ax.patch``) -- internals that don't exist on the Qt path.
+
+        Args:
+            name: Internal name for the mpl-path spacer slot;
+                auto-generated if None. Ignored on the Qt path
+                (toolbar separators are nameless in Qt).
+        """
+        from ._qt import add_qt_separator
+        if add_qt_separator(self.parent.figure):
+            return  # Qt path -- toolbar manages the slot itself
+
+        # mpl fallback: invisible button at the next vertical slot.
+        if name is None:
+            name = f"__separator_{len(self)}"
+        nbtn = len(self)
+        parent_fig = self.parent.figure
+        mul_factor = 6.4 / parent_fig.get_size_inches()[0]
+        btn_w = 0.25 * mul_factor
+        btn_h = 0.05 * mul_factor
+        btn_buf = 0.01
+        pos = (
+            btn_buf,
+            (1 - btn_buf) - ((btn_buf + btn_h) * (nbtn + 1)),
+            btn_w,
+            btn_h,
+        )
+        spacer = Button(plt.axes(pos), name)
+        spacer.ax.patch.set_visible(False)
+        spacer.label.set_visible(False)
+        spacer.ax.axis("off")
+        super().add(spacer)
 
 
 class Selectors(AssetContainer):
@@ -286,7 +365,10 @@ class MemorySlots(AssetContainer):
     def hide(self) -> None:
         """Hide the memory slot text."""
         if self._memtext is not None:
-            self._memtext._text.remove()
+            if self._memtext._overlay is not None:
+                self._memtext._overlay.hide()
+            elif self._memtext._text is not None:
+                self._memtext._text.remove()
         self._memtext = None
 
     def is_enabled(self) -> bool:
