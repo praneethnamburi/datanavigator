@@ -111,6 +111,15 @@ areas.
   script-mode run would silently import the env's installed
   datanavigator (which on older envs lacks `TextView._overlay`),
   producing an `AttributeError` unrelated to the test's intent.
+- `GenericBrowser.copy_to_clipboard` (Ctrl+C) now grabs the entire
+  `QMainWindow` via `QWidget.grab()` instead of `figure.savefig`-ing
+  the matplotlib canvas alone. On a Qt backend the clipboard image
+  now includes every Qt-side widget parented to the window --
+  left-column dock (buttons + state-variables), fast_render image
+  pane, and any downstream sidebars (DUSTrack). Pre-fix, a DUSTrack
+  window pasted into a doc as a thin trace strip with the entire
+  sidebar / image pane missing. mpl/Agg fallback retained via
+  `find_qt_window(...) is None`.
 
 ## [1.3.1] - 2026-05-18
 

@@ -338,7 +338,19 @@ class GenericBrowser:
 
     def copy_to_clipboard(self):
         """
-        Copy the current figure to the clipboard.
+        Copy the current figure window to the clipboard.
+
+        On a Qt backend, grabs the entire ``QMainWindow`` -- the
+        matplotlib canvas *plus* every Qt-side widget parented to it
+        (left-column dock with buttons / statevariables, fast_render
+        image pane, downstream sidebars added by consumers such as
+        DUSTrack). The pre-rc2 path ``savefig``'d the figure alone and
+        missed all of them; on a DUSTrack window the clipboard image
+        would show the trace canvas with nothing where the sidebar /
+        image pane visually sat.
+
+        On non-Qt backends (Agg, headless), falls back to copying just
+        the matplotlib figure via ``savefig``.
 
         Requires a Qt binding (PyQt5 / PyQt6 / PySide2 / PySide6); imported
         lazily via ``qtpy`` so installs without Qt still get the rest of
@@ -347,11 +359,16 @@ class GenericBrowser:
         from qtpy.QtGui import QImage
         from qtpy.QtWidgets import QApplication
 
-        buf = io.BytesIO()
-        self.figure.savefig(buf)
         # Use the QApplication singleton clipboard. Direct QClipboard()
         # instantiation worked on Qt5 but is disallowed on Qt6.
         app = QApplication.instance() or QApplication([])
+        qt_window = find_qt_window(self.figure)
+        if qt_window is not None:
+            app.clipboard().setPixmap(qt_window.grab())
+            return
+
+        buf = io.BytesIO()
+        self.figure.savefig(buf)
         app.clipboard().setImage(QImage.fromData(buf.getvalue()))
         buf.close()
 
