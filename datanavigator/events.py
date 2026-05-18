@@ -606,7 +606,7 @@ class Event:
                     return np.nanmin(x), np.nanmax(x)
                 x = np.asarray(
                     [
-                        nanlim(line.get_xdata(), line.axes.get_ylim())
+                        nanlim(line.get_ydata(), line.axes.get_ylim())
                         for line in this_ax.get_lines()
                         if not line.get_label().startswith("event:")
                     ]

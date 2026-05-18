@@ -1,6 +1,27 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
+## [1.3.1] - 2026-05-18
+
+Patch release. One bug fix on the event-overlay path.
+
+### Fixed
+- `Event._get_ylim` (`datanavigator/events.py:599`) was reading
+  `line.get_xdata()` while claiming to return a y-axis limit. For
+  fill-display events (`display_type="fill"`) this made
+  `ax.fill_between` draw a polygon spanning the *x*-data extent in
+  the *y* direction; autoscale then grew the y-axis to fit. Visible
+  reproducer: `EventPickerDemo`, add a 2-event by pressing `2` at
+  two x positions — pre-fix the y-axis rescaled from ~`(0, 1)` to
+  ~`(0, 10)` for the demo's `np.random.rand(100)` / `sr=10` signal.
+  Line-display events were affected too: the vertical ticks marking
+  the event were drawn at the wrong y-extent, contributing oversized
+  ydata to `dataLim` on the next autoscale. Regression tests:
+  `tests/test_events.py::test_get_ylim_reads_ydata_not_xdata` (unit)
+  and
+  `tests/test_examples.py::test_event_picker_fill_event_preserves_ylim`
+  (end-to-end repro from the bug report).
+
 ## [1.3.0] - 2026-05-17
 
 Video-reader backend swap: drop the `decord` runtime dependency in

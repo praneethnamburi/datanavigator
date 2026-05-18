@@ -477,6 +477,23 @@ def test_find_nearest_idx_val():
     assert np.allclose(_find_nearest_idx_val(array, 2.4), (1, 2.0))
     assert np.allclose(_find_nearest_idx_val(array, 2.6), (3, 3.0))
 
+
+def test_get_ylim_reads_ydata_not_xdata(matplotlib_figure, tmp_path):
+    # Regression: _get_ylim used to call line.get_xdata(), so a fill-display
+    # event drew fill_between spanning the *x*-range of the data and the
+    # y-axis autoscaled to that. Trigger lives in EventPickerDemo + a
+    # size-2 fill event on noise where x runs 0..9.9 and y in [0, 1].
+    fig, ax = matplotlib_figure
+    ax.clear()
+    x = np.linspace(0.0, 100.0, 50)
+    y = np.linspace(-2.0, 3.0, 50)
+    ax.plot(x, y, label="signal")
+
+    ev = Event(name="pick2", size=2, fname=str(tmp_path / "_pick2.json"))
+    lo, hi = ev._get_ylim(ax)
+    assert lo == pytest.approx(-2.0)
+    assert hi == pytest.approx(3.0)
+
     # Test with an empty array
     array = []
     value = 1.0

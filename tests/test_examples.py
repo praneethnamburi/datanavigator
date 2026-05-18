@@ -234,6 +234,27 @@ def test_event_picker_save_event(event_picker, setup_folders):
     # Optional: Add check for file content
 
 
+def test_event_picker_fill_event_preserves_ylim(event_picker):
+    # Regression: adding a fill-display 2-event used to rescale the
+    # y-axis to the *x*-data extent (e.g. (0, 9.9) on sr=10 / n=100 noise
+    # bound to y in [0, 1]). EventPickerDemo is the canonical reproducer
+    # from the 2026-05-17 bug report.
+    picker = event_picker
+    fax = picker.fax
+    ax = picker._ax
+
+    pre = ax.get_ylim()
+    assert max(pre) < 2.0, f"sanity: pre-event ylim too wide: {pre}"
+
+    picker(simulate_key_press_at_xy(fax, key="2", xdata=0.2))
+    picker(simulate_key_press_at_xy(fax, key="2", xdata=0.8))
+
+    post = ax.get_ylim()
+    assert max(post) < 2.0, (
+        f"y-axis blew up after fill-event add: pre={pre}, post={post}"
+    )
+
+
 # --- Tests for ButtonDemo ---
 
 
