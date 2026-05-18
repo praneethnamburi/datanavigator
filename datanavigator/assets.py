@@ -183,11 +183,13 @@ class Buttons(AssetContainer):
 
     Phase 3 of the 1.4.0 Qt refactor (soft mode): when the parent's figure
     is on a Qt canvas AND no explicit ``pos`` is given, ``add()`` builds a
-    native QPushButton in a QToolBar attached to the QMainWindow. On every
-    other backend, or when an explicit ``pos`` is given, the original
-    matplotlib-widgets path runs unchanged. The returned object exposes
-    the same public surface either way (``name``, ``on_clicked``, plus
-    toggle-specific ``state`` / ``toggle`` / ``set_text`` / ``set_state``).
+    native QPushButton in a QVBoxLayout column hosted by a QDockWidget on
+    the QMainWindow's LeftDockWidgetArea (pre-rc2: QToolBar; see
+    :func:`_qt._get_buttons_widget`). On every other backend, or when
+    an explicit ``pos`` is given, the original matplotlib-widgets path
+    runs unchanged. The returned object exposes the same public surface
+    either way (``name``, ``on_clicked``, plus toggle-specific ``state``
+    / ``toggle`` / ``set_text`` / ``set_state``).
 
     Lifecycle gotcha: ``Buttons.add()`` reads the figure's canvas at call
     time. If a Figure subclass adds buttons inside its own ``__init__``
@@ -221,7 +223,7 @@ class Buttons(AssetContainer):
         # GenericBrowser-shaped parents and Figure-as-parent (examples.py).
         # We only Qt-ify the default-position case; an explicit pos is a
         # request for mpl-style placement, which we can't replicate in a
-        # QToolBar without surprises.
+        # QVBoxLayout without surprises.
         b = None
         if pos is None:
             from ._qt import make_qt_button
@@ -266,10 +268,12 @@ class Buttons(AssetContainer):
     def add_separator(self, name: Optional[str] = None) -> None:
         """Add a visual group boundary between buttons.
 
-        On the Qt path (figure on a Qt canvas), inserts a
-        ``QToolBar.addSeparator()`` -- a thin line marking a group
-        boundary. On the mpl path, inserts an invisible button that
-        occupies a layout slot so subsequent buttons are pushed down.
+        On the Qt path (figure on a Qt canvas), inserts a sunken
+        ``QFrame.HLine`` into the buttons-column ``QVBoxLayout`` -- a
+        thin line marking a group boundary. On the mpl path, inserts an
+        invisible button that occupies a layout slot so subsequent
+        buttons are pushed down. (Pre-rc2 the Qt-path inserted a
+        ``QToolBar.addSeparator()`` QAction.)
 
         Promoted to a first-class API for downstream consumers (DUSTrack)
         that previously hand-rolled invisible spacers by mutating

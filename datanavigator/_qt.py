@@ -10,9 +10,12 @@ falls back to its pre-1.4 matplotlib-native rendering.
 Phase 1 contributes :func:`find_qt_window`; Phase 2 adds
 :class:`QtTextOverlay` (a QLabel parented to the matplotlib canvas,
 used by :class:`utils.TextView` when running under QtAgg). Phase 3
-adds :func:`make_qt_button` -- a QPushButton-in-QToolBar replacement
-for the matplotlib-widgets-based Button stack used by
-:class:`assets.Buttons`.
+adds :func:`make_qt_button` -- a QPushButton replacement for the
+matplotlib-widgets-based Button stack used by :class:`assets.Buttons`.
+Pre-rc2 those buttons lived in a ``QToolBar`` on ``LeftToolBarArea``;
+rc2 moves them into a ``QDockWidget``-hosted ``QVBoxLayout`` so a
+sibling state-variables widget can stack beneath them in the same
+column (see :func:`_get_buttons_widget`).
 """
 
 from __future__ import annotations
@@ -167,7 +170,15 @@ def make_text_overlay(figure, pos: Tuple[float, float, str, str],
 
 
 # ---------------------------------------------------------------------------
-# Phase 3 -- Qt buttons in a QToolBar attached to the QMainWindow.
+# Phase 3 -- Qt buttons stacked in a QVBoxLayout inside a QDockWidget on
+# the QMainWindow's LeftDockWidgetArea.
+#
+# Pre-rc2 (Phase 3 original): buttons lived in a QToolBar. rc2 swaps
+# the host to a QDockWidget+QVBoxLayout so the same column can hold
+# the rc2 state-variables widget (dropdowns / toggles) beneath the
+# buttons -- QToolBar's auto-layout doesn't compose with heterogeneous
+# children cleanly. Public surface (Buttons.add / add_separator) is
+# unchanged.
 # ---------------------------------------------------------------------------
 
 
@@ -210,7 +221,7 @@ def _make_qt_button_classes():
             _qt_btn: the underlying QPushButton (Phase 3+ internals).
         """
 
-        def __init__(self, toolbar, name: str, **_kwargs):
+        def __init__(self, container, name: str, **_kwargs):
             self.name = name
             self._qt_btn = QPushButton(name)
             # Don't steal keyboard focus when clicked. The matplotlib
@@ -224,7 +235,11 @@ def _make_qt_button_classes():
             # keeps mouse clicks working while leaving the canvas's
             # focus undisturbed.
             self._qt_btn.setFocusPolicy(Qt.NoFocus)
-            toolbar.addWidget(self._qt_btn)
+            # Insert before the trailing stretch (added in
+            # _get_buttons_widget) so buttons stack top-to-bottom and
+            # the column's empty space falls to the bottom.
+            layout = container.layout()
+            layout.insertWidget(layout.count() - 1, self._qt_btn)
 
         def on_clicked(self, action_func) -> None:
             """Register a callback. See module-level :func:`_accepts_event_arg`."""
@@ -241,8 +256,8 @@ def _make_qt_button_classes():
     class _QtToggleButton(_QtPushButton):
         """Public-API match for :class:`assets.ToggleButton` (mpl path)."""
 
-        def __init__(self, toolbar, name: str, start_state: bool = True, **_kwargs):
-            super().__init__(toolbar, name)
+        def __init__(self, container, name: str, start_state: bool = True, **_kwargs):
+            super().__init__(container, name)
             self._qt_btn.setCheckable(True)
             self._state = bool(start_state)
             self._qt_btn.setChecked(self._state)
@@ -280,39 +295,81 @@ def _make_qt_button_classes():
     return _QtPushButton, _QtToggleButton
 
 
-def _get_buttons_toolbar(qt_window):
-    """Return the cached QToolBar for datanavigator buttons on ``qt_window``.
+def _get_buttons_widget(qt_window):
+    """Return the cached QWidget hosting datanavigator buttons on ``qt_window``.
 
-    First call attaches a new QToolBar to the left side of the window and
-    caches it under ``qt_window._dnav_buttons_toolbar``. Subsequent calls
-    reuse it so all Buttons.add() calls land in the same toolbar.
+    First call attaches a borderless ``QDockWidget`` to
+    ``LeftDockWidgetArea`` containing a ``QWidget`` with a
+    ``QVBoxLayout``, and caches the container under
+    ``qt_window._dnav_buttons_widget``. Subsequent calls reuse it so all
+    Buttons.add() calls land in the same column.
+
+    Pre-rc2 this was :func:`_get_buttons_toolbar` returning a
+    ``QToolBar``; rc2 swaps to ``QDockWidget`` + ``QVBoxLayout`` so the
+    column can host heterogeneous children -- specifically, the rc2
+    state-variables widget stacks beneath the buttons here. QToolBar's
+    auto-layout doesn't compose cleanly with non-action children.
+
+    The trailing ``addStretch(1)`` is load-bearing: buttons inserted via
+    :class:`_QtPushButton.__init__` use ``insertWidget(count - 1, ...)``
+    to land BEFORE the stretch, so they stack top-to-bottom and empty
+    space accumulates at the bottom.
     """
-    tb = getattr(qt_window, "_dnav_buttons_toolbar", None)
-    if tb is None:
-        from qtpy.QtCore import Qt
-        from qtpy.QtWidgets import QToolBar
-        tb = QToolBar("datanavigator", qt_window)
-        qt_window.addToolBar(Qt.LeftToolBarArea, tb)
-        qt_window._dnav_buttons_toolbar = tb
-    return tb
+    container = getattr(qt_window, "_dnav_buttons_widget", None)
+    if container is not None:
+        return container
+    from qtpy.QtCore import Qt
+    from qtpy.QtWidgets import (
+        QDockWidget, QSizePolicy, QVBoxLayout, QWidget,
+    )
+    dock = QDockWidget("datanavigator", qt_window)
+    # Borderless: drop the title bar so the column reads as a single
+    # surface, matching pre-rc2 QToolBar's titleless appearance.
+    dock.setTitleBarWidget(QWidget())
+    # Lock in place. Pre-rc2 QToolBar was floatable by default but
+    # users never undocked it; floating breaks the Commit 2 stacked
+    # statevariables-in-same-column story.
+    dock.setFeatures(QDockWidget.NoDockWidgetFeatures)
+
+    container = QWidget(dock)
+    layout = QVBoxLayout(container)
+    layout.setContentsMargins(4, 4, 4, 4)
+    layout.setSpacing(4)
+    layout.addStretch(1)
+    container.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+
+    dock.setWidget(container)
+    qt_window.addDockWidget(Qt.LeftDockWidgetArea, dock)
+    qt_window._dnav_buttons_widget = container
+    qt_window._dnav_buttons_dock = dock
+    return container
 
 
 def add_qt_separator(figure) -> bool:
-    """Add a separator to the datanavigator QToolBar on ``figure``'s window.
+    """Add a separator line to the buttons column on ``figure``'s window.
 
     Returns True if the separator was added (Qt path active), False if
     ``figure`` is not on a Qt canvas so the caller should fall back to
-    its mpl-side spacer hack. Lazy-creates the toolbar if it doesn't
-    exist yet (matches :func:`make_qt_button`'s caching).
+    its mpl-side spacer hack. Lazy-creates the buttons widget if it
+    doesn't exist yet (matches :func:`make_qt_button`'s caching).
+
+    Pre-rc2 this called ``QToolBar.addSeparator()`` (which appended a
+    ``QAction`` with ``isSeparator()`` True); rc2 inserts a sunken
+    ``QFrame.HLine`` into the QVBoxLayout. Visual is equivalent.
     """
     qt_window = find_qt_window(figure)
     if qt_window is None:
         return False
     try:
-        tb = _get_buttons_toolbar(qt_window)
+        container = _get_buttons_widget(qt_window)
     except ImportError:
         return False
-    tb.addSeparator()
+    from qtpy.QtWidgets import QFrame
+    sep = QFrame(container)
+    sep.setFrameShape(QFrame.HLine)
+    sep.setFrameShadow(QFrame.Sunken)
+    layout = container.layout()
+    layout.insertWidget(layout.count() - 1, sep)
     return True
 
 
@@ -332,10 +389,10 @@ def make_qt_button(figure, name: str, type_: str = "Push", start_state: bool = T
         push_cls, toggle_cls = _make_qt_button_classes()
     except ImportError:
         return None
-    tb = _get_buttons_toolbar(qt_window)
+    container = _get_buttons_widget(qt_window)
     if type_ == "Toggle":
-        return toggle_cls(tb, name, start_state=start_state)
-    return push_cls(tb, name)
+        return toggle_cls(container, name, start_state=start_state)
+    return push_cls(container, name)
 
 
 # ---------------------------------------------------------------------------
@@ -667,10 +724,12 @@ def make_image_pane(figure, picker_radius: float = 5.0,
     when scrubbing long videos (the same column-width the imshow
     occupies above).
 
-    Buttons are *not* in this layout -- they live in the QToolBar
-    attached to ``LeftToolBarArea`` by the 1.4.0-qt
-    ``_get_buttons_toolbar`` path. Conceptually they sit beside the
-    sidebar; spatially Qt manages them outside the central widget.
+    Buttons are *not* in this layout -- they live in a QDockWidget
+    on ``LeftDockWidgetArea`` built by the rc2 :func:`_get_buttons_widget`
+    path. Conceptually they sit beside the sidebar; spatially Qt
+    manages them outside the central widget. (Commit 2 of the rc2 cut
+    will stack the statevariables widget beneath the buttons in that
+    dock so both controls share a single column.)
 
     Returns the new pane (with ``pane.sidebar`` exposed), or ``None``
     if ``figure`` isn't on a Qt canvas.
