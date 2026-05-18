@@ -53,17 +53,31 @@ paths on it. Per-frame work for these two segments dropped to ~0.3 ms
 combined. No API change; both methods accept the same arguments and
 produce the same visual output.
 
-Profile (probe 11) deltas, 105 frames on the same interosseous video:
+Full probe-11 segment breakdown, 105 frames on the interosseous
+video (medians, ms). Segments in call order inside
+`VideoPointAnnotator.update()` (+ `VideoBrowser.update()` body
+inlined for finer attribution); `process_events` is timed
+separately outside the update body and is the actual canvas
+rasterization (what blit would target).
 
-| segment                  | 1.4.0-qt | + cache | delta   |
-|--------------------------|----------|---------|---------|
-| frame_marker             |  18.71   |   0.02  | -18.69  |
-| annotation_visibility    |  15.84   |   0.30  | -15.54  |
-| process_events (raster)  |  83.02   |  82.39  |  ~0     |
-| total                    | 129.17   |  94.28  | -34.89  |
+| segment                  | 1.4.0-qt | + cache | delta   | what it does |
+|--------------------------|---------:|--------:|--------:|--------------|
+| annotation_visibility    |    15.84 |    0.30 |  -15.54 | scatter `set_offsets` + per-label trace `set_ydata` (cached: only on annotation revision change) |
+| statevars_display        |     0.32 |    0.23 |   -0.09 | Qt overlay text push |
+| frame_marker             |    18.71 |    0.02 |  -18.69 | `_frame_marker_{x,y}` `set_data` + FOI `set_data` + ylim recompute (cached: only on annotation revision change) |
+| decode                   |     7.70 |    7.45 |   -0.25 | `self.data[idx].asnumpy()` — PyAV+TOC decode |
+| image_process            |     0.95 |    1.00 |   +0.05 | DUSTrack `enhance_ultrasound_image` (CLAHE + gamma + brightness; see probe 10) |
+| imshow_set_data          |     0.80 |    0.77 |   -0.03 | `self._im.set_data(processed)` |
+| title                    |     0.17 |    0.16 |   -0.01 | `self._ax.set_title(self.titlefunc(self))` |
+| update_assets            |     1.47 |    1.49 |   +0.02 | buttons / memslots / events display push |
+| plt_draw                 |     0.00 |    0.00 |    0.00 | `plt.draw()` × 2 (scheduling only, no synchronous raster) |
+| **subtotal (update body)** | **45.97** | **11.43** | **-34.54** | sum of the above |
+| process_events (raster)  |    83.02 |   82.39 |   -0.63 | `app.processEvents()` drains Qt's paint queue (the actual rasterization) |
+| **total (update + raster)** | **129.17** | **94.28** | **-34.89** | per-frame budget |
 
-Process raster is now **87% of total** — every remaining big-win item
-lives behind blit-mode.
+Process raster is now **87% of total** — every remaining big-win
+item lives behind it (and probe 12 below shows it's not behind
+blit either).
 
 ### Remaining headroom
 
@@ -71,16 +85,31 @@ lives behind blit-mode.
    (`tests/qt_learning/12_benchmark_blit_feasibility.py`) showed
    blit does NOT help on QtAgg with this figure size.** The
    matplotlib-blit pattern assumes raster cost lives in Agg
-   rasterization. On QtAgg with a ~1100x700 figure containing a
-   706x558 imshow + trace axes, the dominant cost is the Qt widget
-   buffer upload (`canvas.blit(bbox)` ~ 83 ms), not the Agg raster
-   (`draw_artist(imshow)` ~ 13 ms; the smaller dynamic artists, ~0.5
-   ms combined). A single full-figure blit cost the same as
+   rasterization, which is true on Agg / TkAgg / inline backends. On
+   QtAgg with a ~1100x700 figure containing a 706x558 imshow + two
+   trace axes, the dominant cost is the **Qt widget pixmap upload**,
+   not the Agg raster. A single full-figure blit cost the same as
    per-axis blits because the per-axis bboxes covered roughly the
-   whole figure area. The 1.4.0-qt widget swap (Phase 2/3) already
-   captured the part Qt-side widget movement could capture; the
-   remaining cost is the canvas pixmap upload itself, which neither
-   blit nor pre-decode can address.
+   whole figure area.
+
+   Probe 12 measured top-line: 100.95 ms baseline (full draw)
+   median -> 110.71 ms median with blit, i.e. blit was **slower**
+   on this stack. Internal breakdown of `blit_render()`:
+
+   | op                          |   ms | notes |
+   |-----------------------------|-----:|-------|
+   | `canvas.restore_region`     | 0.29 | per-axis, cheap |
+   | `draw_artist` of light artists | 0.49 | frame_marker / FOI / scatter combined |
+   | `draw_artist` of imshow (Agg) | 13.63 | Agg rasterization of the 706×558 RGB pixmap |
+   | **`canvas.blit(bbox)`**     | **83.39** | **Qt widget pixmap upload — the dominant cost** |
+   | `flush_events`              | 0.50 | cheap |
+   | reference: `canvas.draw()` (synchronous, no blit) | ~80 | for comparison |
+
+   `canvas.blit()` and `canvas.draw()` cost the same because both
+   push the same total pixel area to the Qt widget. The 1.4.0-qt
+   widget swap (Phase 2/3) already captured the part Qt-side widget
+   movement could capture; the remaining cost is the canvas pixmap
+   upload itself.
 
    The actual operations that *could* reduce raster cost on QtAgg
    are architectural -- either an OpenGL-backed canvas (matplotlib
