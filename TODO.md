@@ -9,9 +9,11 @@ authoritative roadmap lives in
 
 The 1.4.0 theme is **under-the-hood performance**. The Qt swap (done)
 brought ~1.84x speedup on the synthetic harness and ~1.10x on real
-DUSTrack (see [`BENCHMARKING.md`](BENCHMARKING.md)). The real-DUSTrack
-saving is dominated by costs we haven't touched yet -- the items below
-chase those.
+DUSTrack. The cache_quick_wins layer (done) added another 35 ms
+saving on real DUSTrack, taking the cumulative speedup to **1.51x**
+(141.6 -> 93.8 ms median, 7.1 -> 10.7 fps). See
+[`BENCHMARKING.md`](BENCHMARKING.md). The next big win is blit-mode
+rendering against the remaining 82 ms canvas raster.
 
 ### Done in this release (on `1.4.0-qt` branch)
 
@@ -26,28 +28,40 @@ chase those.
   Axes was created but never used on the Qt path; rendered as an
   empty rectangle in the figure. DUSTrack interactive smoke surfaced
   it.
+- ~~**Per-frame trace recompute cache (`cache_quick_wins`).**~~
+  Profile probe 11 found `update_frame_marker` (~18.7 ms) and
+  `update_display_trace` (~15.8 ms) were rebuilding label-trace
+  arrays + ylim per frame, even though their output depends only on
+  annotation contents, not `_current_idx`. Added a `_revision`
+  counter on `VideoAnnotation` that bumps on every `data` mutation;
+  both code paths now cache on it. ~35 ms / frame saved, no API
+  change. Regression test:
+  `test_video_annotation_revision_bumps_on_mutation`.
 
 ### Further perf wins -- to chase in a future session
 
-The Qt swap captured the widget-side cost (~13 ms / frame), but real
-DUSTrack's per-frame budget is dominated by other things that weren't
-touched. Ordered by expected impact:
+After the cache_quick_wins layer, ~87% of the remaining 94 ms / frame
+is canvas raster (`processEvents()`). Ordered by expected impact:
 
 - **Blit-mode rendering for the imshow + annotation Line2D traces.**
   matplotlib's blitting API (`canvas.copy_from_bbox` /
   `canvas.restore_region` / `ax.draw_artist`) re-rasters only the
   artists that changed instead of the full canvas. For DUSTrack, the
-  imshow + ~7 annotation lines update per frame; the axes / titles /
-  signal subplots don't. Estimated saving: tens of ms per frame on
-  real DUSTrack. Substantial code change in `videos.py`,
+  imshow + scatter + frame_marker / FOI lines update per frame; the
+  axes / titles / static signal traces don't. Estimated saving: most
+  of the 82 ms raster cost. Substantial code change in `videos.py`,
   `pointtracking.py`, and `signals.py` -- needs a fixture-style
-  setup_func / update_func split.
+  setup_func / update_func split. Pairs naturally with the existing
+  `freeze_plot_axes` / `unfreeze_plot_axes` buttons on DUSTrack:
+  blit-mode implies frozen axes; rescale should fall back to a full
+  draw + re-cache the backgrounds.
 - **Video-frame pre-decoding / lookahead in `video_reader.py`.** For
   forward scrubbing, decode frames N+1..N+k in a worker thread while
   user is on frame N. Cache hit on the next arrow press, no PyAV
-  call in the timing path. Estimated saving: another ~30-50 ms on
-  real DUSTrack (depending on codec). Concurrency to think about
-  carefully; share with the PyAV TOC cache shape from 1.3.0.
+  call in the timing path. Probe 11 measured decode at ~7.7 ms /
+  frame on the interosseous_pn24-x video; pre-decode takes that out
+  of the timing path entirely. Concurrency to think about carefully;
+  share with the PyAV TOC cache shape from 1.3.0.
 
 ### Unresolved -- low priority
 

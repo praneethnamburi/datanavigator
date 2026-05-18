@@ -22,41 +22,60 @@ Two harnesses:
 
 ### Real DUSTrack UI (dlc env, PySide6 6.4.2, matplotlib 3.8.4, interosseous_pn24-x video)
 
-| Release / Branches              | Median ms | Mean ms | p95 ms | fps (median) | Speedup |
-|---------------------------------|-----------|---------|--------|--------------|---------|
-| 1.3.0 (datanavigator+dustrack)  | 141.6     | 141.7   | 144.1  | 7.1          | 1.00x   |
-| 1.4.0-qt (both)                 | 128.6     | 128.8   | 130.8  | 7.8          | **1.10x** |
+| Release / Branches                   | Median ms | Mean ms | p95 ms | fps (median) | Speedup |
+|--------------------------------------|-----------|---------|--------|--------------|---------|
+| 1.3.0 (datanavigator+dustrack)       | 141.6     | 141.7   | 144.1  | 7.1          | 1.00x   |
+| 1.4.0-qt (both)                      | 128.6     | 128.8   | 130.8  | 7.8          | 1.10x   |
+| 1.4.0-qt + cache_quick_wins          | 93.8      | 93.8    | 95.9   | 10.7         | **1.51x** |
 
-### How to read the gap between the two
+### How the cache_quick_wins layer fits in
 
-The synthetic harness's ~13 ms gap (28.5 -> 15.5) and the real DUSTrack
-harness's ~13 ms gap (141.6 -> 128.6) are essentially the same absolute
-saving. Both come from the same Phase 2 + Phase 3 change: every
-persistent non-plot widget (memoryslot display, state variables,
-buttons) moved off the matplotlib canvas and into native Qt widgets
-that don't participate in the per-frame raster.
+Probe 11 (`tests/qt_learning/11_profile_dustrack_update.py`) broke
+the 128.6 ms 1.4.0-qt baseline into per-segment cost and surfaced two
+items inside the update() body — independent of canvas raster — that
+were doing work proportional to the dataset, not the frame:
 
-In real DUSTrack the ~13 ms is a smaller fraction of the total update
-cost because each frame also costs: video decode, ~7 annotation
-Line2D updates, 2-3 signal subplots, title relayout. None of those
-were touched in 1.4.0. So real-world speedup is ~10% / +0.7 fps,
-not the 1.84x the synthetic shows in isolation. Held-down arrow
-scrubbing will feel marginally smoother, not transformatively so.
+- `VideoPointAnnotator.update_frame_marker` was rebuilding
+  `np.hstack([ann.to_trace(label).T for ann in ...])` and recomputing
+  `nanmin` / `nanmax` per frame to set trace ylim. The output only
+  changes when annotations / label / frames_of_interest change, never
+  when only `_current_idx` moves. Cost: ~18.7 ms / frame on
+  interosseous_pn24-x (36,715 frames × N labels).
+- `VideoAnnotation.update_display_trace` was calling `to_trace(label)`
+  and `set_ydata(...)` for every label per frame. Same observation:
+  the trace contents are a pure function of the annotation data, not
+  the frame index. Cost: ~15.8 ms / frame.
 
-Further wins on real DUSTrack require touching the actual plot update
-path. Two candidates, in expected-impact order, tracked in
-[`TODO.md`](TODO.md) for follow-up in 1.4.0 (which is themed around
-performance — the items below stay in scope):
+Fix: bump a `_revision` counter on every `VideoAnnotation.data`
+mutation (`add` / `remove` / `add_at_frame` / `add_label` /
+`sort_labels` / `sort_data` / `clip_*` / etc.) and cache both code
+paths on it. Per-frame work for these two segments dropped to ~0.3 ms
+combined. No API change; both methods accept the same arguments and
+produce the same visual output.
 
-1. **Blit-mode rendering** for the imshow + ~7 annotation Line2D
-   traces. matplotlib's `canvas.copy_from_bbox` / `restore_region` /
+Profile (probe 11) deltas, 105 frames on the same interosseous video:
+
+| segment                  | 1.4.0-qt | + cache | delta   |
+|--------------------------|----------|---------|---------|
+| frame_marker             |  18.71   |   0.02  | -18.69  |
+| annotation_visibility    |  15.84   |   0.30  | -15.54  |
+| process_events (raster)  |  83.02   |  82.39  |  ~0     |
+| total                    | 129.17   |  94.28  | -34.89  |
+
+Process raster is now **87% of total** — every remaining big-win item
+lives behind blit-mode.
+
+### Remaining headroom
+
+1. **Blit-mode rendering** for the imshow + annotation traces.
+   matplotlib's `canvas.copy_from_bbox` / `restore_region` /
    `ax.draw_artist` re-rasters only the artists that changed, skipping
    axes / titles / signal subplots when they didn't. Estimated saving:
-   tens of ms per frame on real DUSTrack.
-2. **Video-frame pre-decoding / lookahead** in `video_reader.py`. For
-   forward scrubbing, decode frames N+1..N+k in a worker thread while
-   user is on frame N. PyAV decode disappears from the timing path
-   on cache hit. Estimated saving: another ~30-50 ms.
+   most of the 82 ms raster, depending on how much of each axis stays
+   static between frames.
+2. **Video-frame pre-decoding / lookahead** in `video_reader.py`.
+   PyAV decode is ~7.7 ms / frame on this video; pre-decode in a worker
+   thread takes it out of the timing path for forward scrubbing.
 
 ## Methodology
 
@@ -179,3 +198,14 @@ Summary table above.
 | min | median | mean | p95 | p99 | max | fps (median) |
 |---|---|---|---|---|---|---|
 | 140.15 | 141.83 | 141.98 | 144.10 | 146.46 | 146.46 | 7.1 |
+
+### DUSTrack UI -- 1.4.0-qt + cache_quick_wins -- 2026-05-17 20:10:47
+
+- datanavigator: `1.4.0-qt@6c052ef-dirty` source `C:\dev\datanavigator\datanavigator\__init__.py`
+- dustrack: `1.4.0-qt@9ba5e7f` source `C:\dev\DUSTrack\dustrack\__init__.py`
+- backend: QtAgg, qt_api=pyside6, qt_plat=default
+- N=85 (15 warmup discarded)
+
+| min | median | mean | p95 | p99 | max | fps (median) |
+|---|---|---|---|---|---|---|
+| 91.72 | 93.77 | 93.80 | 95.85 | 99.24 | 99.24 | 10.7 |
