@@ -46,9 +46,9 @@ def test_add_separator_qt_path():
     # Buttons widget should exist now (lazily created by first add).
     container = b._qt_window._dnav_buttons_widget
     layout = container.layout()
-    # widgets_before = total children excluding the trailing addStretch().
-    # countWidgets walks layout items because addStretch produces a
-    # QSpacerItem, not a QWidget.
+    # widgets_before / _after count layout-managed QWidgets; the
+    # buttons sub-widget no longer carries a trailing addStretch (the
+    # outer left-column layout owns it).
     def count_widgets(lay):
         n = 0
         for i in range(lay.count()):

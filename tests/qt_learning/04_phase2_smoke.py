@@ -40,6 +40,14 @@ from qtpy.QtWidgets import QApplication
 
 app = QApplication.instance() or QApplication([])
 
+# Pin local source ahead of any env-installed datanavigator (matches the
+# pattern used in 07_phase4a_smoke). Without this, a script-mode run
+# uses the site-packages copy whose TextView lacks the 1.4.0-qt
+# _overlay attribute.
+sys.path.insert(0, os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..")
+))
+
 from datanavigator.core import GenericBrowser
 from datanavigator.utils import TextView
 
@@ -76,8 +84,15 @@ def main():
     b.statevariables.add(name="mode", states=["a", "b"])
     b.statevariables.show(pos="bottom right")
     b.statevariables.update_display(draw=False)
-    ok = b.statevariables._text._overlay is not None
-    print(f"statevariables overlay={'ok' if ok else 'MISSING'}")
+    # rc2: statevars.show() prefers the Qt-native widget over the
+    # canvas-overlay TextView path. Either route is fine for this
+    # Phase 2 sanity check -- both confirm "Qt path active".
+    sv = b.statevariables._text
+    is_rc2_widget = hasattr(sv, "_container") and hasattr(sv, "_sync")
+    is_legacy_overlay = getattr(sv, "_overlay", None) is not None
+    ok = is_rc2_widget or is_legacy_overlay
+    print(f"statevariables qt_path={'ok' if ok else 'MISSING'} "
+          f"(rc2_widget={is_rc2_widget}, legacy_overlay={is_legacy_overlay})")
     assert ok
 
     print("Phase 2 smoke OK")

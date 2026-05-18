@@ -1,6 +1,86 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
+## [1.4.0rc2] - 2026-05-18
+
+Release candidate for 1.4.0. Two themes layered on top of 1.4.0rc1:
+(a) the button host swaps from `QToolBar` to a `QDockWidget` +
+`QVBoxLayout` left column, and (b) state-variables are promoted from a
+read-only text overlay to interactive Qt controls (dropdowns / toggles
+/ labels) mounted in that same column beneath the buttons. Both
+changes share a single goal -- one column of controls for an
+interactive UI, no scattered widgets across the QMainWindow's dock
+areas.
+
+### Added
+- `StateVariables.add(name, states, widget="label")` takes a new
+  `widget` kwarg. Allowed values: `"label"` (default; read-only text
+  line, matching pre-rc2 behavior), `"dropdown"` (`QComboBox`),
+  `"toggle"` (mutually-exclusive `QButtonGroup` of checkable
+  `QToolButton`). The hint is read by the rc2 Qt sidebar; on non-Qt
+  backends (Agg) it's ignored and the value renders as plain text via
+  the legacy `TextView` path.
+- `_qt._QtStatevarsWidget` -- the new layout-managed sidebar widget.
+  Builds one row per state variable, picks control class from
+  `StateVariable.widget`, and on user interaction calls
+  `state.set_state(value)` followed by `parent.update()` -- the same
+  generic redraw every keybind handler already invokes after
+  `state.cycle()`. No new callback API is exposed; consumers stay on
+  the `add(...)` surface.
+- `make_qt_statevars_widget(figure, statevars_container)` -- mount
+  function for the new widget. Inserts it into the QDockWidget left
+  column (above an `addStretch`) so any buttons added later still
+  stack above it.
+- `tests/qt_learning/08_rc2_statevars_widget.py` -- Qt-headless smoke
+  exercising all three `widget` values plus the dropdown-pick /
+  toggle-click round-trip through `parent.update()`.
+- `TestStateVariableWidgetHint` in `tests/test_core.py` -- pure-model
+  pytest coverage for the new kwarg (default, each allowed value,
+  rejection of unknown values, propagation through
+  `StateVariables.add`, and the Agg `TextView` fallback).
+
+### Changed
+- `_qt._get_buttons_widget` replaces the pre-rc2 `_get_buttons_toolbar`.
+  Buttons now stack in a `QVBoxLayout` inside a `QDockWidget` on
+  `LeftDockWidgetArea` (pre-rc2: `QToolBar` on `LeftToolBarArea`). The
+  `QDockWidget` is borderless and non-floatable. Cached attribute on
+  the `QMainWindow` is `_dnav_left_column` (the rc2 left-column
+  struct); the legacy `_dnav_buttons_widget` attribute survives as an
+  alias pointing at the buttons sub-widget.
+- `Buttons.add_separator()` on the Qt path now inserts a sunken
+  `QFrame.HLine` into the buttons `QVBoxLayout` (pre-rc2:
+  `QToolBar.addSeparator()` `QAction`). Visual is equivalent;
+  separator detection in tests now walks layout items.
+- `VideoPointAnnotator` non-fast_render path: the matplotlib gridspec
+  drops its dedicated state-variables column. Layout shrinks from
+  `3x2 width_ratios=[1, 4]` to `3x1`; the image axis is now
+  full-width. State-variables move from the in-figure mpl axis into
+  the QDockWidget left column. The `_ax_statevar` attribute is still
+  set (to `None`) for backwards compatibility but is unused.
+- `StateVariables.show()` tries the new Qt widget path first and falls
+  back to `TextView` on non-Qt backends. The `pos` / `fax` arguments
+  are only consulted on the fallback (`pos` is ignored on the Qt
+  path; the widget's position is dock-managed).
+- `make_image_pane` no longer creates the fast_render `pane.sidebar`
+  QLabel. That QLabel was the fast_render-Tier-2 statevariables text
+  sink; rc2's left column subsumes that role for both Tier 1 and Tier
+  2. The `sidebar_width` kwarg is kept on the signature for API
+  stability but is now ignored. Fast_render `make_image_pane` now
+  returns a pane with just `[image_pane, trace_canvas]`.
+
+### Removed
+- `_qt.make_sidebar_text_sink` / `_qt._QtSidebarTextSink` (fast_render
+  Tier 2 statevariables text sink). Use the rc2 widget path via
+  `StateVariables.show()` -- it covers Tier 1 and Tier 2 in one mount
+  function.
+
+### Fixed
+- Phase 2 smoke (`tests/qt_learning/04_phase2_smoke.py`) now pins the
+  local source on `sys.path[0]` matching the pattern in 07. Pre-rc2 a
+  script-mode run would silently import the env's installed
+  datanavigator (which on older envs lacks `TextView._overlay`),
+  producing an `AttributeError` unrelated to the test's intent.
+
 ## [1.3.1] - 2026-05-18
 
 Patch release. One bug fix on the event-overlay path.

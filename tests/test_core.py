@@ -334,3 +334,59 @@ class TestGenericBrowser:
 
     def test_show_key_bindings(self, browser):
         browser.show_key_bindings("new")
+
+
+class TestStateVariableWidgetHint:
+    """Coverage for the rc2 ``widget=`` kwarg on the StateVariable model.
+
+    The hint is consumed by the Qt sidebar; on the Agg backend the test
+    suite uses, the value just rides along as an attribute. These tests
+    pin the model contract -- legal values, default, and propagation
+    through StateVariables.add().
+    """
+
+    def test_default_is_label(self):
+        from datanavigator.assets import StateVariable
+
+        sv = StateVariable("mode", ["a", "b"])
+        assert sv.widget == "label"
+
+    def test_explicit_dropdown(self):
+        from datanavigator.assets import StateVariable
+
+        sv = StateVariable("mode", ["a", "b"], widget="dropdown")
+        assert sv.widget == "dropdown"
+
+    def test_explicit_toggle(self):
+        from datanavigator.assets import StateVariable
+
+        sv = StateVariable("mode", ["a", "b"], widget="toggle")
+        assert sv.widget == "toggle"
+
+    def test_unknown_widget_rejected(self):
+        from datanavigator.assets import StateVariable
+
+        with pytest.raises(AssertionError):
+            StateVariable("mode", ["a", "b"], widget="slider")
+
+    def test_propagation_through_container_add(self):
+        b = GenericBrowser(figure_handle=plt.figure())
+        b.statevariables.add("layer", ["a", "b"], widget="dropdown")
+        b.statevariables.add("number_keys", ["select", "place"], widget="toggle")
+        b.statevariables.add("plain", ["x", "y"])  # default
+
+        assert b.statevariables["layer"].widget == "dropdown"
+        assert b.statevariables["number_keys"].widget == "toggle"
+        assert b.statevariables["plain"].widget == "label"
+
+    def test_show_falls_back_to_textview_on_agg(self):
+        """On the Agg backend the Qt-widget path is unavailable; show()
+        must transparently fall back to the legacy TextView so existing
+        consumers keep working. The widget hints are silently ignored.
+        """
+        from datanavigator.utils import TextView
+
+        b = GenericBrowser(figure_handle=plt.figure())
+        b.statevariables.add("layer", ["a", "b"], widget="dropdown")
+        b.statevariables.show(pos="bottom left")
+        assert isinstance(b.statevariables._text, TextView)

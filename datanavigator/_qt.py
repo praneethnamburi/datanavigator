@@ -235,11 +235,10 @@ def _make_qt_button_classes():
             # keeps mouse clicks working while leaving the canvas's
             # focus undisturbed.
             self._qt_btn.setFocusPolicy(Qt.NoFocus)
-            # Insert before the trailing stretch (added in
-            # _get_buttons_widget) so buttons stack top-to-bottom and
-            # the column's empty space falls to the bottom.
-            layout = container.layout()
-            layout.insertWidget(layout.count() - 1, self._qt_btn)
+            # No trailing stretch in the buttons sub-widget (the outer
+            # left-column layout owns the stretch), so plain addWidget
+            # produces a top-down stack.
+            container.layout().addWidget(self._qt_btn)
 
         def on_clicked(self, action_func) -> None:
             """Register a callback. See module-level :func:`_accepts_event_arg`."""
@@ -295,54 +294,100 @@ def _make_qt_button_classes():
     return _QtPushButton, _QtToggleButton
 
 
-def _get_buttons_widget(qt_window):
-    """Return the cached QWidget hosting datanavigator buttons on ``qt_window``.
+def _get_left_column(qt_window):
+    """Build (or return the cached) two-section left column on ``qt_window``.
 
-    First call attaches a borderless ``QDockWidget`` to
-    ``LeftDockWidgetArea`` containing a ``QWidget`` with a
-    ``QVBoxLayout``, and caches the container under
-    ``qt_window._dnav_buttons_widget``. Subsequent calls reuse it so all
-    Buttons.add() calls land in the same column.
+    Layout, top-to-bottom in the host widget's outer QVBoxLayout:
 
-    Pre-rc2 this was :func:`_get_buttons_toolbar` returning a
-    ``QToolBar``; rc2 swaps to ``QDockWidget`` + ``QVBoxLayout`` so the
-    column can host heterogeneous children -- specifically, the rc2
-    state-variables widget stacks beneath the buttons here. QToolBar's
-    auto-layout doesn't compose cleanly with non-action children.
+      [ buttons_widget (QWidget + inner QVBoxLayout)   ]  -- buttons land here
+      [ statevars_slot (initially empty)               ]  -- statevars widget
+      [ addStretch(1)                                  ]  -- bottom filler
 
-    The trailing ``addStretch(1)`` is load-bearing: buttons inserted via
-    :class:`_QtPushButton.__init__` use ``insertWidget(count - 1, ...)``
-    to land BEFORE the stretch, so they stack top-to-bottom and empty
-    space accumulates at the bottom.
+    The two sections are separate QWidgets so a button added AFTER
+    ``statevariables.show()`` still lands above the statevars panel
+    (motivating example: VideoPointAnnotator adds its "Refresh UI"
+    button in ``set_key_bindings``, which runs after the statevars
+    setup).
+
+    Cached on the QMainWindow as ``_dnav_left_column``. The legacy
+    ``_dnav_buttons_widget`` attribute still points to the buttons
+    sub-widget so pre-existing code paths (and the rc2 smoke test in
+    ``tests/qt_learning/07_phase4a_smoke.py``) keep working.
     """
-    container = getattr(qt_window, "_dnav_buttons_widget", None)
-    if container is not None:
-        return container
+    col = getattr(qt_window, "_dnav_left_column", None)
+    if col is not None:
+        return col
     from qtpy.QtCore import Qt
     from qtpy.QtWidgets import (
         QDockWidget, QSizePolicy, QVBoxLayout, QWidget,
     )
     dock = QDockWidget("datanavigator", qt_window)
-    # Borderless: drop the title bar so the column reads as a single
-    # surface, matching pre-rc2 QToolBar's titleless appearance.
     dock.setTitleBarWidget(QWidget())
-    # Lock in place. Pre-rc2 QToolBar was floatable by default but
-    # users never undocked it; floating breaks the Commit 2 stacked
-    # statevariables-in-same-column story.
     dock.setFeatures(QDockWidget.NoDockWidgetFeatures)
 
-    container = QWidget(dock)
-    layout = QVBoxLayout(container)
-    layout.setContentsMargins(4, 4, 4, 4)
-    layout.setSpacing(4)
-    layout.addStretch(1)
-    container.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+    host = QWidget(dock)
+    outer = QVBoxLayout(host)
+    outer.setContentsMargins(4, 4, 4, 4)
+    outer.setSpacing(8)
 
-    dock.setWidget(container)
+    buttons_widget = QWidget(host)
+    buttons_layout = QVBoxLayout(buttons_widget)
+    buttons_layout.setContentsMargins(0, 0, 0, 0)
+    buttons_layout.setSpacing(4)
+    outer.addWidget(buttons_widget)
+
+    # statevars slot index is captured at construction time; the
+    # widget itself is inserted lazily by make_qt_statevars_widget.
+    statevars_slot_index = outer.count()  # currently 1
+    outer.addStretch(1)
+
+    host.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+    dock.setWidget(host)
     qt_window.addDockWidget(Qt.LeftDockWidgetArea, dock)
-    qt_window._dnav_buttons_widget = container
-    qt_window._dnav_buttons_dock = dock
-    return container
+
+    col = _LeftColumn(
+        dock=dock, host=host, outer_layout=outer,
+        buttons_widget=buttons_widget,
+        statevars_slot_index=statevars_slot_index,
+    )
+    qt_window._dnav_left_column = col
+    qt_window._dnav_buttons_widget = buttons_widget  # legacy alias
+    qt_window._dnav_buttons_dock = dock              # legacy alias
+    return col
+
+
+class _LeftColumn:
+    """Plain-struct holder for left-column references.
+
+    Defined at module scope (not nested inside _get_left_column) so the
+    instance survives across calls and its attribute names show up in
+    debuggers / repr without depending on a closure.
+    """
+    __slots__ = (
+        "dock", "host", "outer_layout",
+        "buttons_widget", "statevars_widget", "statevars_slot_index",
+    )
+
+    def __init__(self, *, dock, host, outer_layout,
+                 buttons_widget, statevars_slot_index):
+        self.dock = dock
+        self.host = host
+        self.outer_layout = outer_layout
+        self.buttons_widget = buttons_widget
+        self.statevars_widget = None
+        self.statevars_slot_index = statevars_slot_index
+
+
+def _get_buttons_widget(qt_window):
+    """Return the cached QWidget hosting datanavigator buttons.
+
+    Pre-rc2 (the QToolBar era) this returned a ``QToolBar``; Commit 1
+    of rc2 swapped to a ``QWidget`` + ``QVBoxLayout``; Commit 2 makes
+    it a sub-widget of a two-section left column. The public contract
+    is unchanged: buttons added via :class:`_QtPushButton` land in the
+    widget's layout.
+    """
+    return _get_left_column(qt_window).buttons_widget
 
 
 def add_qt_separator(figure) -> bool:
@@ -368,9 +413,249 @@ def add_qt_separator(figure) -> bool:
     sep = QFrame(container)
     sep.setFrameShape(QFrame.HLine)
     sep.setFrameShadow(QFrame.Sunken)
-    layout = container.layout()
-    layout.insertWidget(layout.count() - 1, sep)
+    container.layout().addWidget(sep)
     return True
+
+
+# ---------------------------------------------------------------------------
+# rc2 -- Qt-native state-variables widget (dropdowns / toggles / labels).
+# ---------------------------------------------------------------------------
+#
+# Pre-rc2 statevariables rendered via :class:`utils.TextView` -- a QLabel
+# overlay on the canvas (Phase 2 Qt path) or an ``Axes.text`` artist
+# (mpl fallback). Both were read-only. rc2 promotes them to interactive
+# controls in the same column as the buttons: each StateVariable's
+# ``widget`` hint picks QLabel / QComboBox / QButtonGroup-of-QToolButtons.
+#
+# On any user interaction the widget calls ``state.set_state(value)``
+# and triggers ``statevars_container.parent.update()`` -- the same
+# generic redraw every keybind handler already invokes after a
+# ``cycle()``. No new callback API is exposed to consumers; the only
+# new surface is the ``widget=`` kwarg on ``StateVariables.add()``.
+
+
+def _make_qt_statevars_widget_class():
+    """Build :class:`_QtStatevarsWidget` lazily so importing this module
+    never touches qtpy on a no-Qt-binding machine."""
+    from qtpy.QtCore import Qt
+    from qtpy.QtWidgets import (
+        QButtonGroup, QComboBox, QFrame, QHBoxLayout, QLabel,
+        QSizePolicy, QToolButton, QVBoxLayout, QWidget,
+    )
+
+    class _QtStatevarsWidget(QWidget):
+        """rc2 interactive sidebar widget for state variables.
+
+        Builds one row per state variable, picking the control type from
+        :attr:`StateVariable.widget`:
+
+        - ``"label"``    -- QLabel showing ``"<name>: <value>"`` (read-only;
+          parity with the pre-rc2 text path).
+        - ``"dropdown"`` -- QLabel name + QComboBox.
+        - ``"toggle"``   -- QLabel name + horizontal QButtonGroup of
+          mutually-exclusive checkable QToolButtons.
+
+        Duck-typed compatibility with the pre-rc2 ``statevariables._text``
+        slot:
+
+        - ``.update(text=None)`` -- ignored arg; resyncs each control
+          from its model. Called by ``StateVariables.update_display()``.
+        - ``._pos`` -- settable no-op (DUSTrack used to write this to
+          move the canvas-overlay TextView; meaningless once the
+          controls live in a layout-managed column, but writes are
+          harmless).
+        - ``.text`` -- last-rendered "name: value" strings, surfaced
+          for parity tests that snapshot the prior text path.
+        """
+
+        def __init__(self, statevars_container, parent=None):
+            super().__init__(parent)
+            # Don't steal keyboard focus -- the matplotlib canvas owns
+            # focus for hover-and-press bindings (same reason as
+            # _QtPushButton).
+            self.setFocusPolicy(Qt.NoFocus)
+
+            self._container = statevars_container
+            self._layout = QVBoxLayout(self)
+            self._layout.setContentsMargins(0, 0, 0, 0)
+            self._layout.setSpacing(4)
+
+            # Title row.
+            title = QLabel("State variables:", self)
+            tfont = title.font()
+            tfont.setBold(True)
+            title.setFont(tfont)
+            self._layout.addWidget(title)
+
+            # Per-statevar control rows. _sync maps name -> sync_fn(state)
+            # that resyncs the control to state.current_state.
+            self._sync = {}
+            for state in self._container._list:
+                row, sync_fn = self._build_row(state)
+                self._layout.addWidget(row)
+                self._sync[state.name] = sync_fn
+
+            self.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+
+            # Pre-rc2 text-sink protocol parity (see class docstring).
+            self.text = []
+            self._pos = None
+
+        def _build_row(self, state):
+            kind = getattr(state, "widget", "label")
+            row = QWidget(self)
+            h = QHBoxLayout(row)
+            h.setContentsMargins(0, 0, 0, 0)
+            h.setSpacing(4)
+
+            if kind == "label":
+                lbl = QLabel(_fmt_label(state), row)
+                lbl.setWordWrap(True)
+                h.addWidget(lbl, stretch=1)
+
+                def sync(s, lbl=lbl):
+                    lbl.setText(_fmt_label(s))
+
+                return row, sync
+
+            name_lbl = QLabel(f"{state.name}:", row)
+            h.addWidget(name_lbl)
+
+            if kind == "dropdown":
+                combo = QComboBox(row)
+                combo.setFocusPolicy(Qt.NoFocus)
+                _populate_combo(combo, state)
+                h.addWidget(combo, stretch=1)
+
+                container = self._container
+
+                def on_pick(idx, s=state, c=combo):
+                    if idx < 0 or idx == s._current_state_idx:
+                        return
+                    s.set_state(int(idx))
+                    container.parent.update()
+
+                combo.currentIndexChanged.connect(on_pick)
+
+                def sync(s, c=combo):
+                    # States list might have been mutated externally
+                    # (e.g. add_annotation_layers extends the layer
+                    # rotation). Re-populate rather than just moving
+                    # the current index.
+                    _populate_combo(c, s)
+
+                return row, sync
+
+            if kind == "toggle":
+                bgroup_w = QWidget(row)
+                bgroup_h = QHBoxLayout(bgroup_w)
+                bgroup_h.setContentsMargins(0, 0, 0, 0)
+                bgroup_h.setSpacing(2)
+                group = QButtonGroup(bgroup_w)
+                group.setExclusive(True)
+                buttons = []
+                for i, val in enumerate(state.states):
+                    btn = QToolButton(bgroup_w)
+                    btn.setText(str(val))
+                    btn.setCheckable(True)
+                    btn.setFocusPolicy(Qt.NoFocus)
+                    btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+                    group.addButton(btn, i)
+                    bgroup_h.addWidget(btn)
+                    buttons.append(btn)
+                if 0 <= state._current_state_idx < len(buttons):
+                    buttons[state._current_state_idx].setChecked(True)
+
+                container = self._container
+
+                def on_click(idx, s=state):
+                    if idx < 0 or idx == s._current_state_idx:
+                        return
+                    s.set_state(int(idx))
+                    container.parent.update()
+
+                group.idClicked.connect(on_click)
+
+                h.addWidget(bgroup_w, stretch=1)
+
+                def sync(s, btns=buttons):
+                    # blockSignals so the programmatic setChecked
+                    # doesn't fire idClicked -> recursive update.
+                    for i, b in enumerate(btns):
+                        b.blockSignals(True)
+                        b.setChecked(i == s._current_state_idx)
+                        b.blockSignals(False)
+
+                return row, sync
+
+            # Unknown widget kind: fall through to label.
+            lbl = QLabel(_fmt_label(state), row)
+            h.addWidget(lbl, stretch=1)
+            return row, (lambda s, lbl=lbl: lbl.setText(_fmt_label(s)))
+
+        def update(self, text=None) -> None:
+            """Duck-typed match for :meth:`utils.TextView.update`.
+
+            The ``text`` positional is ignored: each control re-reads
+            its value from the StateVariable model. We also refresh the
+            ``self.text`` snapshot so parity tests that compare
+            statevars._text.text across the pre-rc2 / rc2 paths keep
+            working.
+            """
+            for state in self._container._list:
+                sync_fn = self._sync.get(state.name)
+                if sync_fn is not None:
+                    sync_fn(state)
+            self.text = [_fmt_label(s) for s in self._container._list]
+
+        def hide(self) -> None:
+            super().hide()
+
+    def _fmt_label(state) -> str:
+        return f"{state.name}: {state.current_state}"
+
+    def _populate_combo(combo, state) -> None:
+        combo.blockSignals(True)
+        combo.clear()
+        for val in state.states:
+            combo.addItem(str(val))
+        if 0 <= state._current_state_idx < combo.count():
+            combo.setCurrentIndex(state._current_state_idx)
+        combo.blockSignals(False)
+
+    return _QtStatevarsWidget
+
+
+def make_qt_statevars_widget(figure, statevars_container):
+    """Build a Qt-native statevars widget and mount under the buttons column.
+
+    Returns ``None`` if ``figure`` isn't on a Qt canvas (caller falls
+    back to the pre-rc2 :class:`utils.TextView` path). Inserts the
+    widget into the left-column dock's statevars slot, replacing any
+    previously-mounted widget at that index.
+    """
+    qt_window = find_qt_window(figure)
+    if qt_window is None:
+        return None
+    try:
+        cls = _make_qt_statevars_widget_class()
+    except ImportError:
+        return None
+    col = _get_left_column(qt_window)
+    widget = cls(statevars_container, parent=col.host)
+
+    # If a previous statevars widget was mounted (re-show, or test
+    # re-init), drop it before installing the replacement.
+    if col.statevars_widget is not None:
+        col.outer_layout.removeWidget(col.statevars_widget)
+        col.statevars_widget.setParent(None)
+        col.statevars_widget.deleteLater()
+
+    col.outer_layout.insertWidget(col.statevars_slot_index, widget)
+    col.statevars_widget = widget
+    # Snapshot once so consumers can observe the rendered labels.
+    widget.update()
+    return widget
 
 
 def make_qt_button(figure, name: str, type_: str = "Push", start_state: bool = True):
@@ -708,32 +993,27 @@ def make_image_pane(figure, picker_radius: float = 5.0,
     """Build and install a :class:`_QtImagePane` above ``figure``'s canvas.
 
     The QMainWindow's central widget is replaced with a two-row
-    container mirroring Tier 1's spatial layout:
+    container:
 
-      Top row    : ``[sidebar | image_pane]`` (stretch 2)
-      Bottom row : trace canvas (stretch 1, full width)
+      Top row    : image_pane (stretch 2)
+      Bottom row : trace canvas (stretch 1)
 
-    The sidebar is a fixed-width word-wrapping QLabel used by Tier 2
-    statevariables rendering. Fixed width (default 280 px ~ 40
-    monospace chars) means a long annotation-layer name wraps to the
-    next line instead of reflowing the whole layout -- the image and
-    trace canvas widths stay stable across updates.
+    Pre-rc2 the top row also held a fixed-width word-wrapping QLabel
+    sidebar (the Tier 2 statevariables text sink); rc2 retired that
+    sink in favor of the QDockWidget left column built by
+    :func:`_get_left_column` (which hosts buttons + statevariables for
+    both Tier 1 and Tier 2), so the sidebar QLabel and its
+    ``pane.sidebar`` attribute are gone. ``sidebar_width`` is kept on
+    the signature for API stability but is now ignored.
 
-    The full-width trace canvas in the bottom row preserves the
-    image-to-trace time alignment users build a mental model around
-    when scrubbing long videos (the same column-width the imshow
-    occupies above).
+    Buttons + state-variables live in the QDockWidget on
+    ``LeftDockWidgetArea``; spatially Qt manages them outside the
+    central widget.
 
-    Buttons are *not* in this layout -- they live in a QDockWidget
-    on ``LeftDockWidgetArea`` built by the rc2 :func:`_get_buttons_widget`
-    path. Conceptually they sit beside the sidebar; spatially Qt
-    manages them outside the central widget. (Commit 2 of the rc2 cut
-    will stack the statevariables widget beneath the buttons in that
-    dock so both controls share a single column.)
-
-    Returns the new pane (with ``pane.sidebar`` exposed), or ``None``
-    if ``figure`` isn't on a Qt canvas.
+    Returns the new pane, or ``None`` if ``figure`` isn't on a Qt
+    canvas.
     """
+    _ = sidebar_width  # retired; kept on signature for backwards compat
     qt_window = find_qt_window(figure)
     if qt_window is None:
         return None
@@ -741,10 +1021,7 @@ def make_image_pane(figure, picker_radius: float = 5.0,
         pane_cls = _make_qt_image_pane_class()
     except ImportError:
         return None
-    from qtpy.QtCore import Qt
-    from qtpy.QtWidgets import (
-        QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget,
-    )
+    from qtpy.QtWidgets import QVBoxLayout, QWidget
     canvas = figure.canvas
 
     container = QWidget(qt_window)
@@ -752,42 +1029,11 @@ def make_image_pane(figure, picker_radius: float = 5.0,
     v_layout.setContentsMargins(0, 0, 0, 0)
     v_layout.setSpacing(0)
 
-    top_row = QWidget(container)
-    h_layout = QHBoxLayout(top_row)
-    h_layout.setContentsMargins(0, 0, 0, 0)
-    h_layout.setSpacing(0)
-
-    sidebar = QLabel("", top_row)
-    sidebar.setAlignment(Qt.AlignTop | Qt.AlignLeft)
-    sidebar.setTextFormat(Qt.PlainText)
-    # Word-wrap inside a fixed-width column: long labels wrap to the
-    # next line, so the whole layout doesn't reflow on every state
-    # change. Sidebar height grows down (shrinks the image slightly
-    # via the top-row's vertical stretch); width is invariant.
-    sidebar.setWordWrap(True)
-    sidebar.setFixedWidth(int(sidebar_width))
-    sidebar.setStyleSheet(
-        "QLabel { color: black; background-color: rgba(245, 245, 245, 240);"
-        " padding: 4px 8px; border-right: 1px solid #d0d0d0; }"
-    )
-    font = sidebar.font()
-    font.setFamily("Courier New")
-    sidebar.setFont(font)
-    # Vertical sizing: minimum height = wrapped content height; can
-    # expand if the layout has slack.
-    sidebar.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.MinimumExpanding)
-    # Hidden until populated -- some browsers don't use statevariables.
-    sidebar.hide()
-
-    pane = pane_cls(top_row, picker_radius=picker_radius)
-    h_layout.addWidget(sidebar)
-    h_layout.addWidget(pane, stretch=1)
-    v_layout.addWidget(top_row, stretch=2)
-
+    pane = pane_cls(container, picker_radius=picker_radius)
+    v_layout.addWidget(pane, stretch=2)
     v_layout.addWidget(canvas, stretch=1)
 
     pane.set_focus_target(canvas)
-    pane.sidebar = sidebar
     qt_window.setCentralWidget(container)
     # Resize the host window so the image pane gets a fair share of
     # vertical real estate. The mpl figure for Tier 2 is sized for the
@@ -806,58 +1052,12 @@ def make_image_pane(figure, picker_radius: float = 5.0,
     return pane
 
 
-def _make_qt_sidebar_text_sink_class():
-    """Build :class:`_QtSidebarTextSink` lazily.
-
-    A duck-typed match for :class:`utils.TextView` from
-    :class:`StateVariables`' point of view: exposes ``.update(text)``
-    and ``.text``. Writes into a layout-managed QLabel (the sidebar
-    built by :func:`make_image_pane`) instead of an
-    overlay positioned in canvas-fraction coords. The label's width
-    auto-grows with content, so the text can never overlap the plot.
-    """
-    class _QtSidebarTextSink:
-        def __init__(self, label):
-            self._label = label
-            self.text = []
-            # ``_pos`` is a settable no-op for parity with
-            # :class:`utils.TextView` -- DUSTrack writes
-            # ``self.statevariables._text._pos`` to re-anchor the
-            # canvas overlay, which is meaningless once the text
-            # lives in a layout-managed sidebar.
-            self._pos = None
-
-        def update(self, text):
-            if isinstance(text, dict):
-                lines = [f"{k} - {v}" for k, v in text.items()]
-            elif isinstance(text, (list, tuple)):
-                lines = list(text)
-            else:
-                lines = [str(text)]
-            self.text = lines
-            self._label.setText("\n".join(lines))
-            # No adjustSize() -- the label's width is fixed
-            # (setFixedWidth) and word-wrap handles overflow vertically.
-            # Calling adjustSize would override the fixed width.
-            self._label.show()
-
-        def hide(self):
-            self._label.hide()
-
-    return _QtSidebarTextSink
-
-
-def make_sidebar_text_sink(image_pane):
-    """Return a :class:`_QtSidebarTextSink` bound to ``image_pane.sidebar``.
-
-    Returns ``None`` if the pane has no sidebar (e.g. built before the
-    1.5.0 layout-managed slot was added).
-    """
-    sidebar = getattr(image_pane, "sidebar", None)
-    if sidebar is None:
-        return None
-    cls = _make_qt_sidebar_text_sink_class()
-    return cls(sidebar)
+# rc2 retired :class:`_QtSidebarTextSink` / :func:`make_sidebar_text_sink`.
+# That sink was the fast_render Tier 2 path that wrote a flat newline-
+# joined string into the image_pane's QLabel sidebar. It's been replaced
+# by :func:`make_qt_statevars_widget`, which renders the same
+# statevariables as live QComboBox / QButtonGroup / QLabel controls in
+# the QDockWidget left column (one column for both Tier 1 and Tier 2).
 
 
 def _coerce_qcolor(color):

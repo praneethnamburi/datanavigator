@@ -381,12 +381,26 @@ class MemorySlots(AssetContainer):
 
 
 class StateVariable:
-    """Manage state variables with multiple states."""
+    """Manage state variables with multiple states.
 
-    def __init__(self, name: str, states: list) -> None:
+    The ``widget`` hint is metadata read by the rc2 Qt sidebar to choose
+    a control surface for this state variable: ``"label"`` (read-only
+    text line; default), ``"dropdown"`` (QComboBox), or ``"toggle"``
+    (mutually-exclusive row of checkable QToolButtons). On non-Qt
+    backends the hint is ignored and the value renders as plain text
+    via the legacy TextView path.
+    """
+
+    _ALLOWED_WIDGETS = ("label", "dropdown", "toggle")
+
+    def __init__(self, name: str, states: list, widget: str = "label") -> None:
+        assert widget in self._ALLOWED_WIDGETS, (
+            f"widget={widget!r} not in {self._ALLOWED_WIDGETS}"
+        )
         self.name = name
         self.states = list(states)
         self._current_state_idx = 0
+        self.widget = widget
 
     @property
     def current_state(self) -> Any:
@@ -426,10 +440,20 @@ class StateVariables(AssetContainer):
         """Return state variables as a dictionary."""
         return {x.name: x.states for x in self._list}
 
-    def add(self, name: str, states: list) -> StateVariable:
-        """Add a state variable to the container."""
+    def add(self, name: str, states: list, widget: str = "label") -> StateVariable:
+        """Add a state variable to the container.
+
+        Args:
+            name: identifier; must be unique within the container.
+            states: the rotation of values this variable can take.
+            widget: rc2 Qt-sidebar control surface hint -- one of
+                ``"label"`` (read-only text; default; matches pre-rc2
+                behavior), ``"dropdown"`` (QComboBox), or ``"toggle"``
+                (mutually-exclusive QToolButton row). Ignored on non-Qt
+                backends.
+        """
         assert name not in self.names
-        return super().add(StateVariable(name, states))
+        return super().add(StateVariable(name, states, widget=widget))
 
     def _get_display_text(self) -> List[str]:
         """Get the display text for state variables."""
@@ -438,7 +462,21 @@ class StateVariables(AssetContainer):
         ]
 
     def show(self, pos: str = "bottom right", fax=None) -> None:
-        """Show state variables text."""
+        """Show state variables.
+
+        rc2: tries the interactive Qt widget first (dropdowns / toggles
+        / labels per each :class:`StateVariable`'s ``widget`` hint),
+        mounted in the QDockWidget column beneath the buttons. Falls
+        back to the pre-rc2 :class:`utils.TextView` path on non-Qt
+        backends or if no Qt window is found. The ``pos`` / ``fax``
+        arguments are only consulted on the TextView fallback; on the
+        Qt path they're ignored (the widget's position is dock-managed).
+        """
+        from ._qt import make_qt_statevars_widget
+        widget = make_qt_statevars_widget(self.parent.figure, self)
+        if widget is not None:
+            self._text = widget
+            return
         if fax is None:
             fax = self.parent.figure
         self._text = TextView(self._get_display_text(), fax=fax, pos=pos)
