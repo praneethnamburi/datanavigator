@@ -43,25 +43,44 @@ rendering against the remaining 82 ms canvas raster.
 After the cache_quick_wins layer, ~87% of the remaining 94 ms / frame
 is canvas raster (`processEvents()`). Ordered by expected impact:
 
-- **Blit-mode rendering for the imshow + annotation Line2D traces.**
-  matplotlib's blitting API (`canvas.copy_from_bbox` /
-  `canvas.restore_region` / `ax.draw_artist`) re-rasters only the
-  artists that changed instead of the full canvas. For DUSTrack, the
-  imshow + scatter + frame_marker / FOI lines update per frame; the
-  axes / titles / static signal traces don't. Estimated saving: most
-  of the 82 ms raster cost. Substantial code change in `videos.py`,
-  `pointtracking.py`, and `signals.py` -- needs a fixture-style
-  setup_func / update_func split. Pairs naturally with the existing
-  `freeze_plot_axes` / `unfreeze_plot_axes` buttons on DUSTrack:
-  blit-mode implies frozen axes; rescale should fall back to a full
-  draw + re-cache the backgrounds.
+- ~~**Blit-mode rendering for the imshow + annotation Line2D traces.**~~
+  **Probe 12 (`tests/qt_learning/12_benchmark_blit_feasibility.py`)
+  measured this and found blit does NOT help on QtAgg.** With a
+  hand-coded blit of a live DUSTrack instance (animated dynamic
+  artists, cached backgrounds, restore_region + draw_artist +
+  canvas.blit), the per-frame budget went 100.95 ms -> 110.71 ms
+  median (worse). Internal breakdown:
+
+  ```
+  restore_region       0.29 ms    (cheap, as expected)
+  draw_artist_light    0.49 ms    (cheap dynamic artists)
+  draw_artist_imshow   13.63 ms   (Agg raster of imshow)
+  canvas.blit(bbox)    83.39 ms   <-- Qt widget pixmap upload
+  flush_events         0.50 ms    (cheap)
+  ```
+
+  The dominant raster cost is the Qt buffer upload, not Agg
+  rasterization. `canvas.blit()` pays the same upload cost that
+  `canvas.draw()` pays (~80 ms reference) because both push the same
+  pixel area. Per-axis blits did not help (bbox sum ~= figure bbox);
+  a single full-figure blit cost the same.
+
+  Eliminating raster cost on QtAgg requires architectural change
+  (OpenGL canvas, or rendering the imshow outside matplotlib via a
+  QGraphicsView / QOpenGLWidget / raw QLabel(QPixmap)). That work is
+  sized like the spec's 2.0.0 from-scratch Qt rewrite, not
+  under-the-hood 1.4.0. Tracked in
+  [`BENCHMARKING.md`](BENCHMARKING.md).
+
 - **Video-frame pre-decoding / lookahead in `video_reader.py`.** For
   forward scrubbing, decode frames N+1..N+k in a worker thread while
   user is on frame N. Cache hit on the next arrow press, no PyAV
   call in the timing path. Probe 11 measured decode at ~7.7 ms /
   frame on the interosseous_pn24-x video; pre-decode takes that out
-  of the timing path entirely. Concurrency to think about carefully;
-  share with the PyAV TOC cache shape from 1.3.0.
+  of the timing path entirely. **Correctness invariant
+  ("pre-decoded frame == fresh-decoded frame") needs explicit
+  verification before any implementation -- PyAV/Frame buffer
+  ownership is non-trivial.**
 
 ### Unresolved -- low priority
 

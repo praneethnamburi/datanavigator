@@ -67,15 +67,36 @@ lives behind blit-mode.
 
 ### Remaining headroom
 
-1. **Blit-mode rendering** for the imshow + annotation traces.
-   matplotlib's `canvas.copy_from_bbox` / `restore_region` /
-   `ax.draw_artist` re-rasters only the artists that changed, skipping
-   axes / titles / signal subplots when they didn't. Estimated saving:
-   most of the 82 ms raster, depending on how much of each axis stays
-   static between frames.
+1. ~~**Blit-mode rendering.**~~ **Probe 12
+   (`tests/qt_learning/12_benchmark_blit_feasibility.py`) showed
+   blit does NOT help on QtAgg with this figure size.** The
+   matplotlib-blit pattern assumes raster cost lives in Agg
+   rasterization. On QtAgg with a ~1100x700 figure containing a
+   706x558 imshow + trace axes, the dominant cost is the Qt widget
+   buffer upload (`canvas.blit(bbox)` ~ 83 ms), not the Agg raster
+   (`draw_artist(imshow)` ~ 13 ms; the smaller dynamic artists, ~0.5
+   ms combined). A single full-figure blit cost the same as
+   per-axis blits because the per-axis bboxes covered roughly the
+   whole figure area. The 1.4.0-qt widget swap (Phase 2/3) already
+   captured the part Qt-side widget movement could capture; the
+   remaining cost is the canvas pixmap upload itself, which neither
+   blit nor pre-decode can address.
+
+   The actual operations that *could* reduce raster cost on QtAgg
+   are architectural -- either an OpenGL-backed canvas (matplotlib
+   has experimental backends; not robust on Windows) or rendering
+   the imshow outside matplotlib (`QGraphicsView` /
+   `QOpenGLWidget` / raw `QLabel(QPixmap)`, keeping matplotlib only
+   for the traces). Both are sized like the spec's 2.0.0
+   from-scratch Qt rewrite, not under-the-hood 1.4.0.
+
 2. **Video-frame pre-decoding / lookahead** in `video_reader.py`.
-   PyAV decode is ~7.7 ms / frame on this video; pre-decode in a worker
-   thread takes it out of the timing path for forward scrubbing.
+   PyAV decode is ~7.7 ms / frame on this video; pre-decode in a
+   worker thread takes it out of the timing path for forward
+   scrubbing. Small but real win, no architectural change. The
+   correctness invariant -- "pre-decoded frame == fresh-decoded
+   frame" -- needs explicit verification given PyAV/Frame buffer
+   ownership concerns.
 
 ## Methodology
 
