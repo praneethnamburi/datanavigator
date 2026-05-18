@@ -408,17 +408,56 @@ def _get_buttons_widget(qt_window):
     return _get_left_column(qt_window).buttons_widget
 
 
-def add_qt_separator(figure) -> bool:
-    """Add a separator line to the buttons column on ``figure``'s window.
+def _make_qt_separator_widget(parent, style: str = "single"):
+    """Build a separator widget (single or double HLine) for the Qt path.
 
-    Returns True if the separator was added (Qt path active), False if
-    ``figure`` is not on a Qt canvas so the caller should fall back to
-    its mpl-side spacer hack. Lazy-creates the buttons widget if it
-    doesn't exist yet (matches :func:`make_qt_button`'s caching).
+    ``style="single"``: a sunken ``QFrame.HLine`` (matches the pre-rc2
+    visual one-for-one).
+    ``style="double"``: a ``QWidget`` containing two sunken
+    ``QFrame.HLine``\\ s stacked vertically with a small gap, used to
+    mark a stronger section boundary (e.g. between buttons that belong
+    to different functional groups in DUSTrack's sidebar).
 
-    Pre-rc2 this called ``QToolBar.addSeparator()`` (which appended a
-    ``QAction`` with ``isSeparator()`` True); rc2 inserts a sunken
-    ``QFrame.HLine`` into the QVBoxLayout. Visual is equivalent.
+    The double-separator returns a single ``QWidget`` so callers can
+    add it to a layout the same way they add a single ``QFrame`` --
+    no double-insertion bookkeeping.
+    """
+    from qtpy.QtWidgets import QFrame, QVBoxLayout, QWidget
+    if style == "single":
+        sep = QFrame(parent)
+        sep.setFrameShape(QFrame.HLine)
+        sep.setFrameShadow(QFrame.Sunken)
+        return sep
+    if style == "double":
+        host = QWidget(parent)
+        lay = QVBoxLayout(host)
+        lay.setContentsMargins(0, 2, 0, 2)
+        lay.setSpacing(3)
+        for _ in range(2):
+            line = QFrame(host)
+            line.setFrameShape(QFrame.HLine)
+            line.setFrameShadow(QFrame.Sunken)
+            lay.addWidget(line)
+        return host
+    raise ValueError(
+        f"style={style!r} not in ('single', 'double')"
+    )
+
+
+def add_qt_separator(figure, style: str = "single") -> bool:
+    """Add a separator to the buttons column on ``figure``'s window.
+
+    ``style="single"`` (default) inserts a single sunken ``QFrame.HLine``
+    -- visual continuity with the pre-rc2 ``QToolBar.addSeparator()``
+    behavior. ``style="double"`` inserts two stacked HLines with a small
+    gap (via :func:`_make_qt_separator_widget`), used for a stronger
+    visual break between groups of buttons.
+
+    Returns ``True`` if the separator was added (Qt path active), or
+    ``False`` if ``figure`` is not on a Qt canvas so the caller should
+    fall back to its mpl-side spacer hack. Lazy-creates the buttons
+    widget if it doesn't exist yet (matches :func:`make_qt_button`'s
+    caching).
     """
     qt_window = find_qt_window(figure)
     if qt_window is None:
@@ -427,10 +466,7 @@ def add_qt_separator(figure) -> bool:
         container = _get_buttons_widget(qt_window)
     except ImportError:
         return False
-    from qtpy.QtWidgets import QFrame
-    sep = QFrame(container)
-    sep.setFrameShape(QFrame.HLine)
-    sep.setFrameShadow(QFrame.Sunken)
+    sep = _make_qt_separator_widget(container, style=style)
     container.layout().addWidget(sep)
     return True
 
@@ -528,6 +564,16 @@ def _make_qt_statevars_widget_class():
                     sep.setFrameShape(QFrame.HLine)
                     sep.setFrameShadow(QFrame.Sunken)
                     self._layout.addWidget(sep)
+
+            # Trailing double separator marks the visual end of the
+            # state-variables section. DUSTrack asked for an
+            # "after state variables" group boundary 2026-05-18; the
+            # double separator matches the style the buttons column
+            # uses for major group breaks (see
+            # :meth:`assets.Buttons.add_separator` ``style="double"``).
+            if n > 0:
+                trailing = _make_qt_separator_widget(self, style="double")
+                self._layout.addWidget(trailing)
 
             # Horizontal: ``Preferred`` (not ``Fixed``) so the statevars
             # widget fills the column when the column's effective width

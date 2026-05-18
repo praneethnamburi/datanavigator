@@ -265,15 +265,20 @@ class Buttons(AssetContainer):
 
         return super().add(b)
 
-    def add_separator(self, name: Optional[str] = None) -> None:
+    def add_separator(
+        self, name: Optional[str] = None, style: str = "single",
+    ) -> None:
         """Add a visual group boundary between buttons.
 
         On the Qt path (figure on a Qt canvas), inserts a sunken
         ``QFrame.HLine`` into the buttons-column ``QVBoxLayout`` -- a
-        thin line marking a group boundary. On the mpl path, inserts an
-        invisible button that occupies a layout slot so subsequent
+        thin line marking a group boundary. ``style="double"`` inserts
+        two stacked HLines for a stronger section break, used by
+        DUSTrack to mark major button groups in its rc2 sidebar. On
+        the mpl path, inserts one (or two, for ``style="double"``)
+        invisible buttons that occupy layout slots so subsequent
         buttons are pushed down. (Pre-rc2 the Qt-path inserted a
-        ``QToolBar.addSeparator()`` QAction.)
+        ``QToolBar.addSeparator()`` QAction; single-HLine only.)
 
         Promoted to a first-class API for downstream consumers (DUSTrack)
         that previously hand-rolled invisible spacers by mutating
@@ -282,33 +287,38 @@ class Buttons(AssetContainer):
 
         Args:
             name: Internal name for the mpl-path spacer slot;
-                auto-generated if None. Ignored on the Qt path
-                (toolbar separators are nameless in Qt).
+                auto-generated if None. Ignored on the Qt path.
+            style: ``"single"`` (default) or ``"double"``. See above.
         """
         from ._qt import add_qt_separator
-        if add_qt_separator(self.parent.figure):
-            return  # Qt path -- toolbar manages the slot itself
+        if add_qt_separator(self.parent.figure, style=style):
+            return  # Qt path -- column layout owns the slot
 
-        # mpl fallback: invisible button at the next vertical slot.
-        if name is None:
-            name = f"__separator_{len(self)}"
-        nbtn = len(self)
-        parent_fig = self.parent.figure
-        mul_factor = 6.4 / parent_fig.get_size_inches()[0]
-        btn_w = 0.25 * mul_factor
-        btn_h = 0.05 * mul_factor
-        btn_buf = 0.01
-        pos = (
-            btn_buf,
-            (1 - btn_buf) - ((btn_buf + btn_h) * (nbtn + 1)),
-            btn_w,
-            btn_h,
-        )
-        spacer = Button(plt.axes(pos), name)
-        spacer.ax.patch.set_visible(False)
-        spacer.label.set_visible(False)
-        spacer.ax.axis("off")
-        super().add(spacer)
+        # mpl fallback: invisible button(s) at the next vertical slot.
+        # For style="double" we add two slots so the cumulative spacing
+        # matches the Qt-path visual rhythm.
+        n_slots = 2 if style == "double" else 1
+        for slot_i in range(n_slots):
+            slot_name = name if (n_slots == 1) else f"{name}_{slot_i}" if name else None
+            if slot_name is None:
+                slot_name = f"__separator_{len(self)}"
+            nbtn = len(self)
+            parent_fig = self.parent.figure
+            mul_factor = 6.4 / parent_fig.get_size_inches()[0]
+            btn_w = 0.25 * mul_factor
+            btn_h = 0.05 * mul_factor
+            btn_buf = 0.01
+            pos = (
+                btn_buf,
+                (1 - btn_buf) - ((btn_buf + btn_h) * (nbtn + 1)),
+                btn_w,
+                btn_h,
+            )
+            spacer = Button(plt.axes(pos), slot_name)
+            spacer.ax.patch.set_visible(False)
+            spacer.label.set_visible(False)
+            spacer.ax.axis("off")
+            super().add(spacer)
 
 
 class Selectors(AssetContainer):

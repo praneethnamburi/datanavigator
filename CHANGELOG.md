@@ -13,6 +13,18 @@ interactive UI, no scattered widgets across the QMainWindow's dock
 areas.
 
 ### Added
+- `Buttons.add_separator(name=None, style="single")` takes a new
+  `style` kwarg. `"single"` (default) is the pre-existing single
+  sunken `QFrame.HLine`; `"double"` builds two stacked HLines (via
+  the new module-level `_qt._make_qt_separator_widget` helper) for
+  a stronger group break. `add_qt_separator(figure, style=...)`
+  in `_qt.py` carries the corresponding parameter. mpl fallback in
+  `assets.py` doubles the invisible-button slot count so the
+  vertical rhythm matches.
+- `_QtStatevarsWidget` appends a trailing double separator after
+  the last state-variable row, marking the visual end of the
+  statevars section in the left column. Motivated by DUSTrack
+  asking for an "after state variables" group boundary 2026-05-18.
 - `StateVariables.add(name, states, widget="label")` takes a new
   `widget` kwarg. Allowed values: `"label"` (default; read-only text
   line, matching pre-rc2 behavior), `"dropdown"` (`QComboBox`),
