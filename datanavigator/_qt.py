@@ -410,6 +410,70 @@ def _make_qt_image_pane_class():
         QWidget,
     )
 
+    class _PanZoomGraphicsView(QGraphicsView):
+        """QGraphicsView with built-in wheel-zoom + middle-button pan/reset.
+
+        Zoom is anchored under the cursor (matches every modern image
+        viewer). Middle-mouse *drag* pans the scene; middle-mouse
+        *click* (no drag, < 4 px movement total) resets the transform
+        and re-fits the scene rect. Left and right mouse buttons pass
+        through unchanged so :class:`_QtPickAdapter`'s pick / place
+        callbacks keep firing for annotation work.
+        """
+
+        _ZOOM_STEP = 1.25
+        _CLICK_VS_DRAG_PX = 4
+
+        def __init__(self, scene, image_pane):
+            super().__init__(scene, image_pane)
+            self._image_pane = image_pane
+            self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+            self.setResizeAnchor(QGraphicsView.AnchorViewCenter)
+            self._pan_anchor = None
+            self._pan_total = 0
+
+        def wheelEvent(self, event):  # noqa: N802 (Qt naming)
+            angle = event.angleDelta().y()
+            if angle == 0:
+                event.ignore()
+                return
+            factor = self._ZOOM_STEP if angle > 0 else 1.0 / self._ZOOM_STEP
+            self.scale(factor, factor)
+            event.accept()
+
+        def mousePressEvent(self, event):  # noqa: N802 (Qt naming)
+            if event.button() == Qt.MiddleButton:
+                self._pan_anchor = event.pos()
+                self._pan_total = 0
+                self.setCursor(Qt.ClosedHandCursor)
+                event.accept()
+                return
+            super().mousePressEvent(event)
+
+        def mouseMoveEvent(self, event):  # noqa: N802 (Qt naming)
+            if self._pan_anchor is not None:
+                delta = event.pos() - self._pan_anchor
+                self._pan_anchor = event.pos()
+                self._pan_total += abs(delta.x()) + abs(delta.y())
+                hbar = self.horizontalScrollBar()
+                vbar = self.verticalScrollBar()
+                hbar.setValue(hbar.value() - delta.x())
+                vbar.setValue(vbar.value() - delta.y())
+                event.accept()
+                return
+            super().mouseMoveEvent(event)
+
+        def mouseReleaseEvent(self, event):  # noqa: N802 (Qt naming)
+            if event.button() == Qt.MiddleButton and self._pan_anchor is not None:
+                self.unsetCursor()
+                self._pan_anchor = None
+                if self._pan_total < self._CLICK_VS_DRAG_PX:
+                    # Click, not drag -- reset image zoom.
+                    self._image_pane.reset_view()
+                event.accept()
+                return
+            super().mouseReleaseEvent(event)
+
     class _QtImagePane(QWidget):
         """Qt-native replacement for ``ax.imshow`` + ``ax.scatter`` overlays.
 
@@ -436,7 +500,7 @@ def _make_qt_image_pane_class():
             )
 
             self._scene = QGraphicsScene(self)
-            self._view = QGraphicsView(self._scene, self)
+            self._view = _PanZoomGraphicsView(self._scene, self)
             self._view.setFocusPolicy(Qt.NoFocus)
             self._view.setRenderHint(QPainter.SmoothPixmapTransform, False)
             self._view.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -492,10 +556,26 @@ def _make_qt_image_pane_class():
         def _fit_view(self) -> None:
             self._view.fitInView(self._scene.sceneRect(), Qt.KeepAspectRatio)
 
+        def reset_view(self) -> None:
+            """Clear any user zoom/pan and re-fit the scene to the viewport.
+
+            Bound to middle-click on the pane and to the 'r' key on
+            VideoPointAnnotator (Tier 2). The transform reset is
+            necessary because ``fitInView`` operates on top of the
+            current transform; without ``resetTransform`` first, a
+            zoomed-in user clicking reset would partially un-zoom.
+            """
+            self._view.resetTransform()
+            self._fit_view()
+
         def resizeEvent(self, event):  # noqa: N802 (Qt naming)
             super().resizeEvent(event)
             if self._scene_rect_set:
-                self._fit_view()
+                # Don't re-fit on resize if the user has zoomed/panned
+                # -- they'd lose their view. Only re-fit when the
+                # transform is identity (no user adjustment yet).
+                if self._view.transform().isIdentity():
+                    self._fit_view()
 
         def set_title(self, text: str) -> None:
             self._title.setText(text)
@@ -900,10 +980,12 @@ def _make_qt_pick_adapter_class():
 
     from qtpy.QtCore import QEvent, QObject, Qt
 
+    # Middle button is reserved for the pan/reset gesture handled by
+    # _PanZoomGraphicsView; skip it here so we don't fire spurious
+    # synthetic mpl events for pan drags.
     _QT_TO_MPL = {
         Qt.LeftButton: "LEFT",
         Qt.RightButton: "RIGHT",
-        Qt.MiddleButton: "MIDDLE",
     }
 
     class _QtPickAdapter(QObject):
