@@ -1,6 +1,9 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
+## [1.2.0]
+Adding support for viewing image sequences using the VideoBrowser.
+
 ## [1.1.2]
 Minor bugfix. Fixed error in the palette code when seaborn is not installed
 Minor feature add. Export h5 files as json.

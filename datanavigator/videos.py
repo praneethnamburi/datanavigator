@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Callable, Dict, Optional, Union
 
 import pysampled
@@ -18,6 +19,7 @@ from matplotlib import pyplot as plt
 from matplotlib.gridspec import GridSpec
 
 from . import _config
+from .images import _preload_images
 from .core import GenericBrowser
 
 
@@ -41,7 +43,7 @@ class VideoBrowser(GenericBrowser):
     ):
         """
         Args:
-            vid_name (str): Path to the video file.
+            vid_name (str): Path to the video file. Or a list of pre-loaded images that belong to a class with a method asnumpy() that returns a numpy array to imshow.
             titlefunc (Optional[Callable]): Function to generate the title for the plot.
             figure_or_ax_handle (Optional[Union[plt.Axes, plt.Figure]]): Handle to the figure or axis.
             image_process_func (Callable): Function to process the image.
@@ -56,16 +58,30 @@ class VideoBrowser(GenericBrowser):
             ax_handle = None
         super().__init__(figure_handle)
 
-        if not os.path.exists(vid_name):
-            # try looking in the CLIP FOLDER
-            vid_name = os.path.join(
-                _config.get_clip_folder(), os.path.split(vid_name)[-1]
+        if isinstance(vid_name, (str, Path)):
+            if not os.path.exists(vid_name):
+                # try looking in the CLIP FOLDER
+                vid_name = os.path.join(
+                    _config.get_clip_folder(), os.path.split(vid_name)[-1]
+                )
+            assert os.path.exists(vid_name)
+            self.fname = vid_name
+            self.name = os.path.splitext(os.path.split(vid_name)[1])[0]
+            with open(vid_name, "rb") as f:
+                self.data = VideoReader(f)
+        else:
+            """Pre-loaded sequence of images OR decord.VideoReader object."""
+            # if a list of strings is supplied, assume list of images and preload them
+            if isinstance(vid_name, list) and isinstance(vid_name[0], (str, Path)):
+                self.data = _preload_images(vid_name)
+            else: # pre-loaded list of images
+                self.data = vid_name
+            self.name = "_image_sequence"
+            # set a dummy file name to _image_sequence.img in the path of the folder that is common to all images
+            self.fname = os.path.join(
+                os.path.commonpath([str(p.fpath) for p in self.data]),
+                "_image_sequence.img"
             )
-        assert os.path.exists(vid_name)
-        self.fname = vid_name
-        self.name = os.path.splitext(os.path.split(vid_name)[1])[0]
-        with open(vid_name, "rb") as f:
-            self.data = VideoReader(f)
 
         if ax_handle is None:
             self._ax = self.figure.subplots(1, 1)
@@ -75,21 +91,36 @@ class VideoBrowser(GenericBrowser):
         self._im = self._ax.imshow(self.data[0].asnumpy())
         self._ax.axis("off")
 
-        self.fps = self.data.get_avg_fps()
-        if titlefunc is None:
-            self.titlefunc = (
-                lambda s: f"Frame {s._current_idx}/{len(s)}, {s.fps} fps, {str(timedelta(seconds=s._current_idx/s.fps))}"
-            )
+        if not self.is_image_sequence():
+            self.fps = self.data.get_avg_fps()
+            if titlefunc is None:
+                self.titlefunc = (
+                    lambda s: f"Frame {s._current_idx}/{len(s)}, {s.fps} fps, {str(timedelta(seconds=s._current_idx/s.fps))}"
+                )
+        else:
+            self.fps = None
+            if titlefunc is None:
+                self.titlefunc = lambda s: f"Image {s._current_idx}/{len(s)}"
 
         self.image_process_func = image_process_func
 
         self.set_default_keybindings()
-        self.add_key_binding("e", self.extract_clip)
+        if not self.is_image_sequence():
+            self.add_key_binding("e", self.extract_clip)
+        
         self.memoryslots.show(pos="bottom left")
 
         if self.__class__.__name__ == "VideoBrowser":
             plt.show(block=False)
             self.update()
+
+    def is_image_sequence(self) -> bool:
+        """Check if the data is an image sequence.
+
+        Returns:
+            bool: True if the data is an image sequence, False otherwise.
+        """
+        return self.name == "_image_sequence"
 
     def increment_frac(self, n_steps: int = 100) -> None:
         """Browse entire dataset in n_steps.
@@ -138,6 +169,10 @@ class VideoBrowser(GenericBrowser):
         Returns:
             str: Path to the extracted clip.
         """
+        if self.fname is None:
+            print("Perhaps you loaded an image sequence. Extraction is disabled.")
+            return None
+        
         try:
             import ffmpeg
 

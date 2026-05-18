@@ -212,8 +212,11 @@ def get_palette(
         return palettes[palette_name][:n_colors]
 
 
-def is_video(vide_file: str):
-    cap = cv.VideoCapture(vide_file)
+def is_video(vid_file: str):
+    if vid_file is None or not os.path.exists(vid_file):
+        return False
+    
+    cap = cv.VideoCapture(vid_file)
     if cap.isOpened():
         ret, _ = cap.read()
         cap.release()

@@ -68,6 +68,7 @@ from .assets import (
     ToggleButton,
 )
 from .events import portion, Event, EventData, Events
+from .images import Image, ImageSequence
 
 from .core import GenericBrowser
 from .plots import PlotBrowser
