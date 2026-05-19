@@ -199,6 +199,89 @@ def test_buttons_add_multi_rejects_per_spec_pos():
         b.buttons.add_multi(dict(text="ok"), dict(text="bad", pos=(0.1, 0.1, 0.2, 0.05)))
 
 
+def test_buttons_register_and_apply_style():
+    """Buttons.register_style + add(..., style_tag=) runs the styler on the
+    new button and records the tag for later reapply_styles().
+    """
+    b = GenericBrowser(figure_handle=plt.figure())
+    seen = []
+    b.buttons.register_style("paint", lambda btn: seen.append(btn))
+    bn = b.buttons.add(text="painted", style_tag="paint")
+    assert seen == [bn]
+    assert bn._style_tag == "paint"
+    # style_tag=None (default) bypasses styling and records the absence.
+    bn2 = b.buttons.add(text="plain")
+    assert bn2._style_tag is None
+    assert seen == [bn]
+
+
+def test_buttons_consumer_style_shadows_builtin():
+    """Re-registering a built-in tag name routes through the consumer's
+    styler, not the dnav default in styles.BUILTIN_STYLES.
+    """
+    from datanavigator import styles
+    b = GenericBrowser(figure_handle=plt.figure())
+    builtin_calls = []
+    consumer_calls = []
+    # Patch the built-in so we can detect if it (wrongly) fires.
+    orig = styles.BUILTIN_STYLES["primary"]
+    styles.BUILTIN_STYLES["primary"] = lambda btn: builtin_calls.append(btn)
+    try:
+        b.buttons.register_style("primary", lambda btn: consumer_calls.append(btn))
+        bn = b.buttons.add(text="hero", style_tag="primary")
+        assert consumer_calls == [bn], "consumer styler should run"
+        assert builtin_calls == [], "built-in styler should NOT run when shadowed"
+    finally:
+        styles.BUILTIN_STYLES["primary"] = orig
+
+
+def test_buttons_unknown_style_tag_raises():
+    """Unknown style_tag at add-time -> KeyError (catches typos / forgotten
+    register_style calls instead of silently no-op'ing).
+    """
+    b = GenericBrowser(figure_handle=plt.figure())
+    with pytest.raises(KeyError, match="nope"):
+        b.buttons.add(text="x", style_tag="nope")
+    # add_multi propagates the same error path.
+    with pytest.raises(KeyError, match="alsonope"):
+        b.buttons.add_multi(dict(text="a", style_tag="alsonope"))
+
+
+def test_buttons_reapply_styles():
+    """reapply_styles() re-runs the current registry on every recorded
+    style_tag; buttons without a tag are skipped.
+    """
+    b = GenericBrowser(figure_handle=plt.figure())
+    marks = []
+    b.buttons.register_style("paint", lambda btn: marks.append(("v1", btn)))
+    tagged = b.buttons.add(text="tagged", style_tag="paint")
+    untagged = b.buttons.add(text="untagged")
+    assert marks == [("v1", tagged)]
+
+    # Swap the registry -- a theme swap is the motivating case.
+    b.buttons.register_style("paint", lambda btn: marks.append(("v2", btn)))
+    b.buttons.reapply_styles()
+    # v2 should have fired for tagged only; untagged stays out of the loop.
+    assert marks == [("v1", tagged), ("v2", tagged)]
+
+
+def test_buttons_add_multi_per_spec_style_tag():
+    """Each spec carries its own style_tag; styler runs per-button in order
+    and the tag is recorded on each returned button.
+    """
+    b = GenericBrowser(figure_handle=plt.figure())
+    seen = []
+    b.buttons.register_style("A", lambda btn: seen.append(("A", btn.name)))
+    b.buttons.register_style("B", lambda btn: seen.append(("B", btn.name)))
+    row = b.buttons.add_multi(
+        dict(text="a", style_tag="A"),
+        dict(text="b", style_tag="B"),
+        dict(text="c"),  # no style_tag -> no call
+    )
+    assert seen == [("A", "a"), ("B", "b")]
+    assert [bn._style_tag for bn in row] == ["A", "B", None]
+
+
 def test_buttons_use_mpl_path_under_agg():
     """Soft Qt mode: under Agg, Buttons.add returns mpl widgets, not Qt wrappers.
 

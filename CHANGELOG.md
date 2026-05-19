@@ -13,6 +13,22 @@ interactive UI, no scattered widgets across the QMainWindow's dock
 areas.
 
 ### Added
+- `Buttons.register_style(name, styler)` + `Buttons.add(..., style_tag=)`
+  / `Buttons.add_multi(specs with per-spec style_tag=)` + a new
+  `Buttons.reapply_styles()` method. A `style_tag=` declares which
+  registered styler should run on the freshly built button at the
+  tail of `_finalize_button`. Resolution is two-tier: consumer
+  registry first, then the dnav-shipped built-ins in the new
+  `datanavigator.styles` module
+  (`primary` / `secondary` / `neutral` / `warn`); unknown tags raise
+  `KeyError` at add-time so typos / "forgot to register first" fail
+  loud. Consumers can shadow a built-in by re-registering the same
+  name -- DUSTrack rc2 does exactly this with its per-group
+  `workflow / display / niche / utilities / swap` palette. Replaces
+  the pre-rc2 pattern of consumer-side "collect buttons into lists,
+  run a batch styling pass at end-of-setup"; each button now lives
+  in one place (the `add` call) with its styling tag declared
+  inline.
 - `Buttons.add_multi(*specs)` -- N buttons side-by-side in a single
   row. Each `spec` is a dict of kwargs accepted by `Buttons.add()`
   (`text=`, `action_func=`, `type_=`, ...); the call returns the list

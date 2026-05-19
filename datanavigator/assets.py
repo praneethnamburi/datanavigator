@@ -250,6 +250,11 @@ class Buttons(AssetContainer):
     def __init__(self, parent: Any) -> None:
         super().__init__(parent)
         self._mpl_row_cursor = 0
+        # Consumer-registered style stylers keyed by tag. _resolve_style
+        # checks this first, then falls back to styles.BUILTIN_STYLES, so
+        # consumers can either pick a built-in tag or shadow it with a
+        # bespoke palette.
+        self._style_registry: dict = {}
 
     def add(
         self,
@@ -260,6 +265,7 @@ class Buttons(AssetContainer):
         h: float = 0.05,
         buf: float = 0.01,
         type_: str = "Push",
+        style_tag: Optional[str] = None,
         **kwargs,
     ) -> Button:
         """
@@ -306,14 +312,64 @@ class Buttons(AssetContainer):
             else:
                 b = Button(plt.axes(pos), text, **kwargs)
 
-        self._finalize_button(b, action_func)
+        self._finalize_button(b, action_func, style_tag=style_tag)
         self._mpl_row_cursor += 1
         return super().add(b)
+
+    def register_style(
+        self, name: str, styler: Callable[[Any], None],
+    ) -> None:
+        """Register a per-button styler under ``name``.
+
+        Consumers call this once at setup, then pass ``style_tag=name``
+        to :meth:`add` / :meth:`add_multi`. Re-registering an existing
+        name (including a :mod:`.styles` built-in) replaces the binding
+        -- consumer registrations always win over built-ins.
+
+        ``styler`` is invoked with the freshly-constructed button as its
+        sole argument at the tail of :meth:`_finalize_button`. It should
+        detect the Qt path via ``getattr(b, "_qt_btn", None)`` and apply
+        QSS / palette manipulation; mpl-path styling is the styler's
+        choice (the dnav built-ins no-op there).
+        """
+        self._style_registry[name] = styler
+
+    def _resolve_style(self, tag: str) -> Callable[[Any], None]:
+        """Resolve a style tag to a styler callable.
+
+        Consumer registry first, then :data:`styles.BUILTIN_STYLES`. An
+        unknown tag raises ``KeyError`` -- silent no-op would mask
+        typos and "forgot to register_style before adding."
+        """
+        if tag in self._style_registry:
+            return self._style_registry[tag]
+        from .styles import BUILTIN_STYLES
+        if tag in BUILTIN_STYLES:
+            return BUILTIN_STYLES[tag]
+        raise KeyError(
+            f"unknown style_tag {tag!r}; register it via "
+            f"Buttons.register_style({tag!r}, ...) or use one of the "
+            f"built-in tags: {sorted(BUILTIN_STYLES)}"
+        )
+
+    def reapply_styles(self) -> None:
+        """Re-run the styler for every already-added button.
+
+        Useful after :meth:`register_style` changes a binding (e.g. a
+        theme swap re-registers ``"primary"`` with a dark-mode palette
+        and the existing buttons need to repaint).
+        """
+        for b in self._list:
+            tag = getattr(b, "_style_tag", None)
+            if tag is None:
+                continue
+            self._resolve_style(tag)(b)
 
     def _finalize_button(
         self,
         b: Any,
         action_func: Optional[Union[Callable, List[Callable]]],
+        style_tag: Optional[str] = None,
     ) -> None:
         """Wire action callbacks + reverse-resolve any pre-registered keybinding.
 
@@ -322,6 +378,10 @@ class Buttons(AssetContainer):
         zero or one callable was passed), connects every callable via
         ``on_clicked``, and applies a shortcut-hint suffix to the label if
         the parent already has a matching ``on_button=True`` KeyBinding.
+        If ``style_tag`` is given, resolves it through the consumer
+        registry / built-ins and applies the styler on ``b`` (and
+        records the tag on ``b._style_tag`` so :meth:`reapply_styles`
+        can find it later).
         """
         # Record the action callables so add_key_binding(... on_button=True)
         # can match later (or so the reverse scan below can match an
@@ -346,6 +406,13 @@ class Buttons(AssetContainer):
                 continue
             if any(af is kb.callback for af in b._action_funcs):
                 apply_shortcut_hint(b, shortcut)
+
+        # Style-tag application -- record the tag (so reapply_styles can
+        # find it later) and run the styler once. KeyError on miss
+        # surfaces typos / unregistered tags at add-time.
+        b._style_tag = style_tag
+        if style_tag is not None:
+            self._resolve_style(style_tag)(b)
 
     def add_multi(self, *specs: dict) -> List[Any]:
         """Add N buttons side-by-side in a single row.
@@ -421,7 +488,10 @@ class Buttons(AssetContainer):
                 assert type_ in ("Push", "Toggle")
                 spec_extra = {
                     k: v for k, v in spec.items()
-                    if k not in ("text", "action_func", "pos", "w", "h", "buf", "type_")
+                    if k not in (
+                        "text", "action_func", "pos", "w", "h", "buf",
+                        "type_", "style_tag",
+                    )
                 }
                 x = btn_buf + i * (per_btn_w + x_gap)
                 pos = (x, y, per_btn_w, btn_h)
@@ -432,10 +502,13 @@ class Buttons(AssetContainer):
                 row_buttons.append(b)
 
         # Finalize each button (action_func wiring + keybinding-hint reverse
-        # scan) and register with the container. One row -> cursor += 1.
+        # scan + per-spec style_tag) and register with the container.
+        # One row -> cursor += 1.
         out = []
         for spec, b in zip(specs, row_buttons):
-            self._finalize_button(b, spec.get("action_func"))
+            self._finalize_button(
+                b, spec.get("action_func"), style_tag=spec.get("style_tag"),
+            )
             super().add(b)
             out.append(b)
         self._mpl_row_cursor += 1
