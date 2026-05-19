@@ -350,7 +350,9 @@ class TestGenericBrowser:
         browser.show_key_bindings()
         out = capsys.readouterr().out
         assert "[Navigation]" in out
-        assert "[View]" in out
+        # set_default's pan + reset + ctrl+c/ctrl+k bindings now fall
+        # to "Other" (the "View" group is gone post-rc2-merge).
+        assert "[Other]" in out
 
 
 class TestStateVariableWidgetHint:

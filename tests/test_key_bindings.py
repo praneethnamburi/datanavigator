@@ -172,8 +172,10 @@ def test_show_key_bindings_stdout_on_non_qt(capsys):
     b.show_key_bindings()
     out = capsys.readouterr().out
     assert "[Navigation]" in out
-    assert "[View]" in out
-    # Sample bindings should appear under their declared groups.
+    # Pan + reset + show-keybindings + copy-to-clipboard all fall to
+    # "Other" now (the pre-rc2 "View" group is gone).
+    assert "[Other]" in out
+    # Sample bindings should appear in the dump.
     assert "left" in out
     assert "ctrl+k" in out
 

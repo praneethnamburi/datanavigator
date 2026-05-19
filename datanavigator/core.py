@@ -384,33 +384,31 @@ class GenericBrowser:
             "ctrl+k",
             (lambda s: s.show_key_bindings()).__get__(self),
             description="show key bindings",
-            group="View",
         )
+        # Pan keys fall to "Other"; subclasses (e.g. VideoPointAnnotator)
+        # reposition them via remove + re-add so the four pan keys sit
+        # as one contiguous block alongside any extra pan bindings.
         self.add_key_binding(
             "/",
             (lambda s: s.pan(direction="right")).__get__(self),
             description="pan right",
-            group="View",
         )
         self.add_key_binding(
             ",",
             (lambda s: s.pan(direction="left")).__get__(self),
             description="pan left",
-            group="View",
         )
         self.add_key_binding(
             "l",
             (lambda s: s.pan(direction="up")).__get__(self),
             description="pan up",
-            group="View",
         )
         self.add_key_binding(
             ".",
             (lambda s: s.pan(direction="down")).__get__(self),
             description="pan down",
-            group="View",
         )
-        self.add_key_binding("r", self.reset_axes, group="View")
+        self.add_key_binding("r", self.reset_axes)
 
     def increment(self, step: int = 1):
         """
