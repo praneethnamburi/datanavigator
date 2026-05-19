@@ -293,6 +293,37 @@ class TestGenericBrowser:
             "untouched"
         )
 
+    def test_reset_axes_axes_scope_kwarg(self):
+        """`reset_axes(axes=)` restricts the walk to the given subset.
+
+        rc2 added this kwarg to support the cursor-aware ``r`` dispatch
+        in VideoPointAnnotator. The default (``axes=None``) preserves the
+        historical full-figure walk; passing an explicit subset must
+        leave every other axis on the figure untouched.
+        """
+        fig, axs = plt.subplots(3, 1)
+        for ax in axs:
+            ax.plot([0, 1], [0, 1])
+            ax.set_xlim(0, 100)
+            ax.set_ylim(-50, 50)
+        for ax in axs:
+            assert ax.get_autoscalex_on() is False
+            assert ax.get_autoscaley_on() is False
+
+        browser = GenericBrowser(figure_handle=fig)
+        browser.reset_axes(axis="both", axes=[axs[0], axs[1]])
+
+        # axs[0] / axs[1] got autoscale re-enabled and refit to data.
+        for ax in (axs[0], axs[1]):
+            assert ax.get_autoscalex_on() is True
+            assert ax.get_autoscaley_on() is True
+        # axs[2] was skipped: autoscale flags + manual xlim/ylim survive.
+        assert axs[2].get_autoscalex_on() is False
+        assert axs[2].get_autoscaley_on() is False
+        assert axs[2].get_xlim() == (0, 100)
+        assert axs[2].get_ylim() == (-50, 50)
+        plt.close(fig)
+
     def test_increment(self, browser):
         browser.data = [1, 2, 3, 4, 5]
         browser.update = MagicMock()

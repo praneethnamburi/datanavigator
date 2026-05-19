@@ -145,6 +145,42 @@ areas.
   2. The `sidebar_width` kwarg is kept on the signature for API
   stability but is now ignored. Fast_render `make_image_pane` now
   returns a pane with just `[image_pane, trace_canvas]`.
+- **`r` keybinding is now cursor-aware in fast_render (Tier 2).**
+  `VideoPointAnnotator._reset_view_all` dispatches on `event.inaxes`
+  (set by `_patch_event_for_image_pane` in `__call__`): cursor over
+  the Tier 2 image pane resets the image zoom/pan only; cursor over
+  `_ax_trace_x` / `_ax_trace_y` resets the trace pair with x pinned
+  to `(0, ann.n_frames)` (the full video range) and y autoscaled to
+  data; cursor elsewhere or `event is None` falls back to the same
+  trace treatment plus the image-pane reset, preserving muscle memory
+  for `r` hit while hovering a button or off-figure. Pre-fix, a user
+  who panned the trace x-axis to inspect a feature then hit `r` to
+  refit the trace y also lost their image-pane zoom (and vice versa).
+  Pinning x to the full video range — rather than autoscaling to the
+  current annotation extent — keeps frames outside the annotation
+  envelope visible, which is the usual case when extending
+  annotations to a new region. Dissolves the Tier 2 image-zoom /
+  trace-axes coupling the 2026-05-19 trace-scaling audit flagged as a
+  follow-up. Tier 1 is unaffected (no image pane to scope). Binding
+  description is now `"Reset view under cursor (traces use full-video
+  x)"`. Regression test: `test_r_keybinding_cursor_aware_dispatch` in
+  `tests/test_pointtracking.py` covers all three dispatch branches.
+- **`alt+r` is the autoscale-to-data-extent sibling of `r`** (Tier 2).
+  `VideoPointAnnotator._reset_view_to_data_extent` mirrors
+  `_reset_view_all`'s dispatch structure, but the trace branch and
+  fallback autoscale x and y to the data extent (`reset_axes(axis=
+  "both", axes=[trace_x, trace_y])`) instead of pinning x to the full
+  video. The image-pane branch is identical to `r`. Use when the
+  annotated region is much narrower than the full video and you want
+  to zoom in on it. Regression test:
+  `test_alt_r_keybinding_cursor_aware_data_extent_dispatch`.
+- `GenericBrowser.reset_axes` takes a new optional keyword `axes=`
+  that restricts the walk to a given subset (default `None` walks
+  `self.figure.axes` as before). Added to support the cursor-aware
+  `r` / `alt+r` dispatch above — the trace branches pass
+  `[_ax_trace_x, _ax_trace_y]` to scope the refit to the trace pair.
+  Regression test: `test_reset_axes_axes_scope_kwarg` in
+  `tests/test_core.py`.
 
 ### Removed
 - `_qt.make_sidebar_text_sink` / `_qt._QtSidebarTextSink` (fast_render

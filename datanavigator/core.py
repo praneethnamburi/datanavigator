@@ -266,13 +266,20 @@ class GenericBrowser:
         if hasattr(self, "data"):  # otherwise returns None
             return len(self.data)
 
-    def reset_axes(self, axis: str = "both", event=None):
+    def reset_axes(self, axis: str = "both", event=None, axes=None):
         """
         Reframe data within matplotlib axes.
 
         Args:
             axis (str, optional): Axis to reset. Defaults to "both".
             event (optional): Event that triggered the reset. Defaults to None.
+            axes (Iterable[Axes] | None, optional): Restrict the walk to
+                this subset of axes. ``None`` (default) walks
+                ``self.figure.axes`` — the historical behaviour.
+                Cursor-aware dispatch in ``VideoPointAnnotator._reset_view_all``
+                passes a 2-element list ``[_ax_trace_x, _ax_trace_y]`` to
+                scope the refit to the trace pair when the cursor is over
+                one of them.
         """
         # `get_subplotspec() is not None` replaces the deprecated
         # `isinstance(ax, maxes.SubplotBase)` filter (mpl 3.7+ deprecation,
@@ -285,7 +292,8 @@ class GenericBrowser:
         # excluded from the autoscale extent without an explicit
         # collection-walk. Fold each collection's datalim into
         # `ax.dataLim` before letting autoscale read it.
-        for ax in self.figure.axes:
+        ax_iter = self.figure.axes if axes is None else axes
+        for ax in ax_iter:
             if ax.get_subplotspec() is None:
                 continue
             ax.relim()
