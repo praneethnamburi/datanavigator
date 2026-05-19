@@ -143,6 +143,60 @@ QMainWindow's dock areas. (c) closes the bug class that bit
   `tests/test_pointtracking.py`. The "keeps_non_continuous" case is
   the load-bearing one -- distinguishes the new method from the
   continuous variant.
+- `AssetContainer.remove(name)` -- counterpart to `add()`. Pops and
+  returns the asset whose `.name` matches; raises `KeyError` if no
+  asset carries that name. The container only manages membership;
+  the caller is responsible for tearing down any plot handles /
+  Qt widgets the popped asset owns. Inherited unchanged by every
+  AssetContainer subclass (`Buttons`, `Selectors`, `MemorySlots`,
+  `StateVariables`, `VideoAnnotations`). Motivated by DUSTrack
+  1.1.0rc2's new "Remove layer" UI affordance which needs a way
+  to drop a `VideoAnnotation` from a live session without
+  restarting the annotator.
+- `VideoAnnotation.reload()` -- inverse of `save()`. Wholesale-
+  replaces `self.data` with the result of `load()` (so the property
+  setter rewraps each per-label inner dict as `_TrackedFrameDict`),
+  then bumps `_revision` explicitly so per-frame caches keyed on
+  `(label_list, _revision)` invalidate. If `fname` is `None` or
+  doesn't exist, `load()`'s empty-fallback branch returns
+  `{str(i): {} for i in range(n)}` -- so "reload from disk if a
+  file exists, otherwise reset to empty" is one method call. Mirrors
+  the explicit-bump pattern already used by `sort_data`,
+  `sort_labels`, `clip_trailing_empty_labels`, `remove_empty_labels`.
+  Drives the DUSTrack 1.1.0rc2 "Discard unsaved annotations" button.
+- `VideoPointAnnotator.remove_annotation_layer(name)` -- removes an
+  annotation layer from a live session. Tears down the layer's
+  scatter + trace artists via `VideoAnnotation.clear_display()`,
+  drops it from `self.annotations` via `AssetContainer.remove`, then
+  resyncs the `annotation_layer` / `annotation_overlay` state-
+  variables (rotation lists + current selections) through the new
+  `_refresh_annotation_state_lists` helper. Active-layer handoff:
+  if the removed layer was the primary, the previous-in-rotation
+  layer is auto-selected (falling through to the first surviving
+  layer if the removed one was at index 0); if it was the overlay,
+  the overlay clears to `None`. Raises `ValueError` if it would
+  leave the container empty -- consumers wanting a "reset contents"
+  semantic should use `VideoAnnotation.reload()` on the surviving
+  layer instead. Treats every named entry the same at the dnav
+  layer; the `"buffer"` exclusion is a DUSTrack-side UI concern.
+  Drives the DUSTrack 1.1.0rc2 "Remove layer" button.
+- `VideoPointAnnotator._refresh_annotation_state_lists()` -- helper
+  extracted from the inline statevar-rotation refresh that lived at
+  the tail of `add_annotation_layers`. Single source of truth for
+  the `annotation_layer` / `annotation_overlay` rotation resync,
+  shared by `add_annotation_layers` (extending the rotation) and
+  the new `remove_annotation_layer` (shrinking it). Also clamps
+  each statevariable's `_current_state_idx` so the position is
+  never out-of-bounds after a shrink, providing a last-resort
+  safety net for the caller's "pick a new selection" decision.
+- `test_video_annotation_reload_with_file_on_disk`,
+  `test_video_annotation_reload_without_file`,
+  `test_asset_container_remove_happy_path_and_keyerror`,
+  `test_remove_annotation_layer_swaps_active_and_clears_overlay`,
+  `test_remove_annotation_layer_refuses_only_layer`, and
+  `test_remove_annotation_layer_preserves_overlay_when_unrelated`
+  in `tests/test_pointtracking.py`. Cover the new `reload` /
+  `remove_annotation_layer` / `AssetContainer.remove` surfaces.
 
 ### Changed
 - `_qt._get_buttons_widget` replaces the pre-rc2 `_get_buttons_toolbar`.

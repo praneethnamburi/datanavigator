@@ -210,6 +210,19 @@ class AssetContainer:
         self._list.append(asset)
         return asset
 
+    def remove(self, name: str) -> Any:
+        """Remove and return the asset with this ``name``.
+
+        Counterpart to :meth:`add`; raises ``KeyError`` if no asset in
+        the container carries that name. The caller is responsible for
+        tearing down any plot handles / Qt widgets the asset owns --
+        :class:`AssetContainer` only manages the membership list.
+        """
+        for i, x in enumerate(self._list):
+            if getattr(x, "name", None) == name:
+                return self._list.pop(i)
+        raise KeyError(name)
+
     def __contains__(self, item: str) -> bool:
         """Check if an asset with the given name exists in the container."""
         return item in self.names
