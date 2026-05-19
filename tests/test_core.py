@@ -251,6 +251,48 @@ class TestGenericBrowser:
         assert np.allclose(ax.get_xlim(), (-0.05, 1.05))
         assert np.allclose(ax.get_ylim(), (-0.05, 1.05))
 
+    def test_reset_axes_includes_fill_artists(self, browser):
+        """`reset_axes` must refit ylim to include `fill_between` extent.
+
+        Regression guard for the 1.3.1 audit punchlist item: pre-fix,
+        `ax.relim()` on older mpl skipped `PolyCollection` artists, so
+        `r` left fill artists outside the new ylim. DUSTrack uses
+        `display_type="fill"` events; pressing `r` on a frame with a
+        large fill must include it in the autoscale.
+        """
+        ax = browser.figure.get_axes()[0]
+        x = np.linspace(0, 1, 50)
+        ax.plot(x, np.full_like(x, 1.0))
+        # Fill rectangle reaches y=50, well above the line at y=1.
+        ax.fill_between(x, 0, 50, alpha=0.2)
+        ax.set_ylim(0, 2)  # user has zoomed in tight, fill is off-screen
+        browser.reset_axes()
+        assert ax.get_ylim()[1] >= 50, (
+            f"reset_axes should refit y to include fill_between at 50, "
+            f"got ylim={ax.get_ylim()}"
+        )
+
+    def test_reset_axes_skips_non_subplot_axes(self, browser):
+        """`reset_axes` must skip axes without a subplotspec.
+
+        Colorbar / inset axes have `get_subplotspec() is None`; their
+        view limits are managed by their owning artist and should not
+        be clobbered by a global reset.
+        """
+        ax = browser.figure.get_axes()[0]
+        ax.plot([0, 1], [0, 1])
+        # Add a non-subplot axis (a manually-placed axes via add_axes
+        # has no subplotspec). Mimics the colorbar / inset case.
+        non_subplot = browser.figure.add_axes([0.85, 0.1, 0.05, 0.8])
+        non_subplot.plot([0, 1], [100, 200])
+        non_subplot.set_ylim(0, 1000)
+        original_lim = non_subplot.get_ylim()
+        browser.reset_axes()
+        assert non_subplot.get_ylim() == original_lim, (
+            "reset_axes should leave non-subplot axes (e.g. colorbar) "
+            "untouched"
+        )
+
     def test_increment(self, browser):
         browser.data = [1, 2, 3, 4, 5]
         browser.update = MagicMock()

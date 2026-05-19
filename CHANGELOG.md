@@ -153,6 +153,45 @@ areas.
   function.
 
 ### Fixed
+- **Trace-pane scaling audit (Bug B: x-axis preserved across mid-session
+  layer adds).** `VideoAnnotation.setup_display_trace` no longer
+  unconditionally calls `ax_x.set_xlim(0, self.n_frames)`. The call is
+  now guarded with `ax_x.get_autoscalex_on()`, so the *first*
+  annotation constructed on the axes claims xlim (flipping autoscale
+  off as a side effect) and every subsequent layer-add is a no-op.
+  Pre-fix, each in-session `_adopt_layer` call in DUSTrack (Reduce
+  jitter / post-train DLC refresh / first-time Apply manual
+  corrections) blew away any user pan/zoom on the trace time-axis,
+  forcing reliance on DUSTrack's `Freeze plot axes` workaround. Press
+  `r` to refit. Regression tests: `test_setup_display_trace_xlim_guard`
+  + `test_video_point_annotator_xlim_preserved_across_layer_add`.
+- **Trace-pane scaling audit (Bug A: Manual y-policy).**
+  `VideoPointAnnotator.update_frame_marker`'s cache-miss branch no
+  longer unconditionally re-applies `set_ylim(nanlim(trace_data))` on
+  every annotation mutation, label switch, or frame-of-interest
+  toggle. The two `set_ylim` calls are guarded with
+  `get_autoscaley_on()`, so the first cache miss with real data fits
+  y (claiming autoscale) and subsequent mutations leave the user's
+  view alone. Press `r` to refit. Pre-fix, every `add` / `remove` /
+  LK interpolate / copy-from-overlay / label change re-fitted y,
+  forcing reliance on DUSTrack's `Freeze plot axes` workaround. The
+  all-NaN case is now also a true no-op (pre-fix it silently
+  consumed the autoscale claim by setting ylim to itself). Regression
+  test: `test_video_point_annotator_ylim_manual_policy` (covers
+  first-fit / mutation-preserves / label-switch-preserves /
+  FOI-preserves / r-restores-refit).
+- **`reset_axes` polish (1.3.1 audit punchlist).**
+  `GenericBrowser.reset_axes` swaps the deprecated
+  `isinstance(ax, maxes.SubplotBase)` filter for
+  `ax.get_subplotspec() is not None` (mpl 3.7+ deprecation, slated for
+  removal). The method now also folds each axis's `Collection`
+  datalims into `ax.dataLim` before calling `autoscale()`, so
+  `fill_between` artists -- e.g. DUSTrack `display_type="fill"`
+  events -- contribute to the autoscale extent. mpl's `Axes.relim()`
+  walks Lines + Patches + Images but not Collections, so pressing
+  `r` previously left fill artists outside the refit ylim.
+  Regression tests: `test_reset_axes_includes_fill_artists` +
+  `test_reset_axes_skips_non_subplot_axes`.
 - Phase 2 smoke (`tests/qt_learning/04_phase2_smoke.py`) now pins the
   local source on `sys.path[0]` matching the pattern in 07. Pre-rc2 a
   script-mode run would silently import the env's installed

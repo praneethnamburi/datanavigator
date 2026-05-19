@@ -274,10 +274,26 @@ class GenericBrowser:
             axis (str, optional): Axis to reset. Defaults to "both".
             event (optional): Event that triggered the reset. Defaults to None.
         """
+        # `get_subplotspec() is not None` replaces the deprecated
+        # `isinstance(ax, maxes.SubplotBase)` filter (mpl 3.7+ deprecation,
+        # on track for removal) while preserving the original intent:
+        # skip colorbar / inset axes that don't have a subplotspec.
+        #
+        # `Axes.relim()` walks Lines + Patches + Images but NOT
+        # Collections (mpl 3.7 / 3.8 behaviour). `fill_between` returns
+        # a PolyCollection, so DUSTrack fill-display events would be
+        # excluded from the autoscale extent without an explicit
+        # collection-walk. Fold each collection's datalim into
+        # `ax.dataLim` before letting autoscale read it.
         for ax in self.figure.axes:
-            if isinstance(ax, maxes.SubplotBase):
-                ax.relim()
-                ax.autoscale(axis=axis)
+            if ax.get_subplotspec() is None:
+                continue
+            ax.relim()
+            for collection in ax.collections:
+                datalim = collection.get_datalim(ax.transData)
+                if datalim.width >= 0 and datalim.height >= 0:
+                    ax.update_datalim(datalim.get_points(), updatex=True, updatey=True)
+            ax.autoscale(axis=axis)
         plt.draw()
 
     def add_key_binding(
