@@ -50,6 +50,23 @@ areas.
   pytest coverage for the new kwarg (default, each allowed value,
   rejection of unknown values, propagation through
   `StateVariables.add`, and the Agg `TextView` fallback).
+- `VideoAnnotation.keep_overlapping_frames()` -- sibling of
+  `keep_overlapping_continuous_frames()` (the `alt+q` action) without
+  the consecutive-runs constraint: drops frames where any label is
+  missing, but preserves isolated fully-labeled frames. Motivated by
+  DUSTrack's "Train DLC model" pre-flight, which needs a way to drop
+  partial-label frames before training -- DLC tolerates per-bodypart
+  NaN in its CSV but partial frames degrade the trained model in
+  practice. Not wired to a keybinding; DUSTrack is the only caller.
+- `VideoPointAnnotator.keep_overlapping_frames()` -- wrapper that
+  calls the annotation method and triggers `self.update()`.
+- `test_video_annotation_keep_overlapping_frames`,
+  `test_video_annotation_keep_overlapping_frames_keeps_non_continuous`,
+  `test_video_annotation_keep_overlapping_frames_no_overlap_aborts`,
+  and `test_video_point_annotator_keep_overlapping_frames` in
+  `tests/test_pointtracking.py`. The "keeps_non_continuous" case is
+  the load-bearing one -- distinguishes the new method from the
+  continuous variant.
 
 ### Changed
 - `_qt._get_buttons_widget` replaces the pre-rc2 `_get_buttons_toolbar`.
