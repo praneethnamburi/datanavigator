@@ -25,6 +25,13 @@ areas.
   the last state-variable row, marking the visual end of the
   statevars section in the left column. Motivated by DUSTrack
   asking for an "after state variables" group boundary 2026-05-18.
+- `VideoPointAnnotator._add_default_buttons()` -- overridable hook
+  for the post-`__init__` button installation (currently just the
+  `Refresh UI` action). Subclasses with a hand-curated sidebar
+  order (DUSTrack) override to a no-op and add the same buttons at
+  the desired position. Pre-fix, `Refresh UI` was added inline at
+  the end of `VideoPointAnnotator.__init__`, locking it to slot 0
+  of the buttons column for every subclass.
 - `StateVariables.add(name, states, widget="label")` takes a new
   `widget` kwarg. Allowed values: `"label"` (default; read-only text
   line, matching pre-rc2 behavior), `"dropdown"` (`QComboBox`),
@@ -111,6 +118,13 @@ areas.
   the widest entry. Rows are now visually grouped with a sunken
   `QFrame.HLine` separator between adjacent state variables.
   Reported during DUSTrack 1.1.0rc2 testing.
+- `_QtStatevarsWidget` no longer renders the bold "State variables:"
+  title row; the trailing double separator + group rule already
+  delimit the section. The widget now also paints itself with a
+  slightly darker background (palette `base.darker(120)`, theme-
+  adaptive) so the statevars area reads as a visually distinct
+  group from the buttons column above it. Requested during DUSTrack
+  1.1.0rc2 sidebar polish.
 - Left-column dock host gets `setMinimumWidth(_LEFT_COLUMN_MIN_WIDTH=300)`
   (a touch above the pre-rc2 `sidebar_width=280` default; tuned
   empirically during DUSTrack 1.1.0rc2 testing). Combined with

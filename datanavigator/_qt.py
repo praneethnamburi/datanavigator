@@ -534,17 +534,23 @@ def _make_qt_statevars_widget_class():
             # _QtPushButton).
             self.setFocusPolicy(Qt.NoFocus)
 
+            # Slightly darker background than the parent dock so the
+            # statevars section reads as a visually distinct group from
+            # the buttons column above it. Theme-adaptive: derive the
+            # tint from the current palette rather than hard-coding an
+            # RGB so the widget still looks reasonable under both light
+            # and dark themes (DUSTrack runs dark by default; other
+            # consumers don't).
+            self.setAutoFillBackground(True)
+            pal = self.palette()
+            base = pal.color(self.backgroundRole())
+            pal.setColor(self.backgroundRole(), base.darker(120))
+            self.setPalette(pal)
+
             self._container = statevars_container
             self._layout = QVBoxLayout(self)
-            self._layout.setContentsMargins(0, 0, 0, 0)
+            self._layout.setContentsMargins(4, 4, 4, 4)
             self._layout.setSpacing(4)
-
-            # Title row.
-            title = QLabel("State variables:", self)
-            tfont = title.font()
-            tfont.setBold(True)
-            title.setFont(tfont)
-            self._layout.addWidget(title)
 
             # Per-statevar control rows. _sync maps name -> sync_fn(state)
             # that resyncs the control to state.current_state. Rows are
