@@ -3,14 +3,51 @@ All notable changes to this project will be documented in this file.
 
 ## [1.4.0rc2] - 2026-05-18
 
-Release candidate for 1.4.0. Two themes layered on top of 1.4.0rc1:
+Release candidate for 1.4.0. Three themes layered on top of 1.4.0rc1:
 (a) the button host swaps from `QToolBar` to a `QDockWidget` +
-`QVBoxLayout` left column, and (b) state-variables are promoted from a
+`QVBoxLayout` left column, (b) state-variables are promoted from a
 read-only text overlay to interactive Qt controls (dropdowns / toggles
-/ labels) mounted in that same column beneath the buttons. Both
-changes share a single goal -- one column of controls for an
-interactive UI, no scattered widgets across the QMainWindow's dock
-areas.
+/ labels) mounted in that same column beneath the buttons, and (c) a
+focused robustness subset folded from the originally-planned rc3 band
+(see 2026-05-19 release-arc decision in the spec): inner per-label
+annotation dicts become a `dict` subclass that bumps `_revision` on
+every mutator, making the 1.4.0rc1-era cache-invariant discipline a
+data-structure invariant. (a) + (b) share a single goal -- one column
+of controls for an interactive UI, no scattered widgets across the
+QMainWindow's dock areas. (c) closes the bug class that bit
+`check_labels_with_lk` and DUSTrack's
+`copy_existing_annotations_from_overlay` in rc1 at the data layer.
+
+### Added
+- `_TrackedFrameDict` -- internal `dict` subclass that wraps every
+  per-label inner annotation dict at `VideoAnnotation.data[label]`.
+  Bumps `parent._revision` on `__setitem__` / `__delitem__` / `pop` /
+  `popitem` / `clear` / `update` / `setdefault`. Turns the rc1-era
+  "route writes through `add()` / `remove()` / `add_at_frame()`"
+  discipline into a data-structure invariant: any future direct
+  mutation through `ann.data[label][frame] = ...` correctly bumps
+  revision without reviewer-side enforcement. Parent reference is a
+  weakref to avoid lifetime extension. `__reduce__` drops the
+  weakref for pickle round-tripping. The 1.4.0rc1 bypass sites
+  (`check_labels_with_lk` and DUSTrack's
+  `copy_existing_annotations_from_overlay`) were already fixed in
+  rc2 via the public API; this guard makes the *next* bypass
+  unrepresentable. Perf measured on 100k-frame synthetic data:
+  bulk-load 14 ms / 1M entries (negligible), per-frame write
+  sub-microsecond, 1M-entry read path 13% over bare dict -- well
+  under the 36 ms / frame budget on `interosseous_pn24-x`.
+- `VideoAnnotation.data` is now a property; setter calls
+  `_wrap_label_dicts` which is idempotent (re-wraps only
+  foreign-bound or bare inner dicts). Wholesale-reassignment sites
+  (`sort_data`, `clip_labels`, `keep_overlapping_frames`,
+  `keep_overlapping_continuous_frames`, `from_multiple_files`) were
+  refactored to assemble in one shot and route through the setter --
+  the previous per-label `self.data[label] = {...}` pattern would
+  have written bare dicts into the wrapped outer container.
+  `add_label` updated to use `self.data = {**self._data, label: {}}`
+  for the same reason. `_revision = 0` hoisted before the first
+  data assignment in `__init__` so the guard finds it during
+  initial wrapping.
 
 ### Added
 - `Buttons.register_style(name, styler)` + `Buttons.add(..., style_tag=)`
