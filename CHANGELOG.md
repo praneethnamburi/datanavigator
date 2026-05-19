@@ -376,6 +376,47 @@ QMainWindow's dock areas. (c) closes the bug class that bit
   window pasted into a doc as a thin trace strip with the entire
   sidebar / image pane missing. mpl/Agg fallback retained via
   `find_qt_window(...) is None`.
+- **Labels promoted to first-class schema.** Three coordinated
+  changes:
+  (1) `VideoAnnotation.save` no longer calls `remove_empty_labels()`
+  on the way out. Empty-but-declared labels round-trip through JSON
+  as `"label": {}` instead of being silently pruned. The method
+  stays available for callers that explicitly want a lean export
+  (DUSTrack pre-flight before DLC training calls it directly).
+  (2) `VideoAnnotation.to_trace(label)` is now schema-tolerant: a
+  label missing from `self.data` returns the full NaN array
+  (matching the docstring's "unannotated frames are NaN" promise,
+  treated as every-frame-unannotated). Lets `update_frame_marker`
+  iterate every layer with one shared active label even when a
+  layer doesn't carry that label.
+  (3) The default-label bootstrap shrank from 10 placeholders to
+  1, since the no-prune save would otherwise write a slate of
+  empties on every fresh save. `VideoAnnotation(n_labels=N)` and
+  `VideoPointAnnotator(..., n_labels=N)` still let callers declare a
+  larger schema up front.
+  Net fix: DUSTrack's `apply_manual_corrections` no longer crashes
+  with `AssertionError: label in self.labels` when the user has
+  manually corrected only one of two labels (the patch overlay's
+  empty label was getting save-pruned, the corrections layer was
+  then missing that label, and `update_frame_marker` blew up
+  hstacking traces across layers). Tests:
+  `test_video_annotation_save_preserves_empty_labels`,
+  `test_to_trace_returns_nan_for_missing_label`,
+  `test_corrections_layer_shaped_update_frame_marker`,
+  `test_add_annotation_layers_unions_declared_labels`,
+  `test_video_annotation_default_n_labels_is_one`.
+- `VideoPointAnnotator._ensure_target_has_labels(target, labels)`
+  static helper. Used by the three LK interpolate paths
+  (`interpolate_with_lk`, `interpolate_with_lk_norstc`,
+  `check_labels_with_lk`) to declare missing labels on the target
+  layer before bulk `add` calls. Pre-rc2 the 10-default-empty
+  bootstrap made cross-layer label-set parity implicit; with
+  first-class labels the LK callers declare what they need.
+- `add_annotation_layers` synthesis takes the union of every
+  layer's *declared* labels (was: labels-with-data only), so
+  empty-but-declared labels flow back into the layer set on
+  reload and a layer missing a peer's declared label gets it
+  added.
 
 ## [1.3.1] - 2026-05-18
 
