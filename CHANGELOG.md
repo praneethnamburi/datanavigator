@@ -197,6 +197,17 @@ QMainWindow's dock areas. (c) closes the bug class that bit
   `test_remove_annotation_layer_preserves_overlay_when_unrelated`
   in `tests/test_pointtracking.py`. Cover the new `reload` /
   `remove_annotation_layer` / `AssetContainer.remove` surfaces.
+- `VideoAnnotations.reorder(names)` -- permute the underlying
+  `AssetContainer._list` so layer names follow `names` (which must be
+  a permutation of the current `self.names`). Idempotent when `names`
+  already matches current order; raises `ValueError` otherwise. Sits
+  on the plural `VideoAnnotations` rather than the base
+  `AssetContainer` to limit blast radius to the annotation-layer use
+  case it was built for. Membership-only -- callers that own the
+  rotation of an `annotation_layer` / `annotation_overlay`
+  state-variable are responsible for resyncing via
+  `_refresh_annotation_state_lists` after a reorder. Drives the
+  DUSTrack 1.1.0rc2 layer-regrouping pass.
 
 ### Changed
 - `_qt._get_buttons_widget` replaces the pre-rc2 `_get_buttons_toolbar`.
