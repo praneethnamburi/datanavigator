@@ -94,9 +94,12 @@ def test_case_insensitive_fallback_doesnt_affect_special_keys():
 
     fired_decrement = []
     fired_decrement_frac = []
-    b._keypressdict["left"] = (lambda: fired_decrement.append(1), "decrement")
-    b._keypressdict["shift+left"] = (
-        lambda: fired_decrement_frac.append(1), "decrement frac"
+    from datanavigator.core import KeyBinding
+    b._keypressdict["left"] = KeyBinding(
+        callback=lambda: fired_decrement.append(1), description="decrement"
+    )
+    b._keypressdict["shift+left"] = KeyBinding(
+        callback=lambda: fired_decrement_frac.append(1), description="decrement frac"
     )
 
     # Pressing 'left' fires 'left' only, not 'shift+left'.
@@ -198,7 +201,11 @@ class TestGenericBrowser:
 
         browser.add_key_binding("alt+1", dummy_function, "test description")
         assert "alt+1" in browser._keypressdict
-        assert browser._keypressdict["alt+1"] == (dummy_function, "test description")
+        kb = browser._keypressdict["alt+1"]
+        assert kb.callback is dummy_function
+        assert kb.description == "test description"
+        assert kb.group is None
+        assert kb.on_button is False
 
     def test_set_default_keybindings(self, browser):
         browser.set_default_keybindings()
@@ -208,12 +215,16 @@ class TestGenericBrowser:
         assert "down" in browser._keypressdict
 
     def test_call_key_press_event(self, browser):
+        from datanavigator.core import KeyBinding
         event = simulate_key_press(browser.figure, key="left")
         browser.set_default_keybindings()
-        browser._keypressdict["left"] = (MagicMock(), "decrement")
-        browser._keypressdict["left"][0].assert_not_called()
+        mock_callback = MagicMock()
+        browser._keypressdict["left"] = KeyBinding(
+            callback=mock_callback, description="decrement"
+        )
+        mock_callback.assert_not_called()
         browser(event)
-        browser._keypressdict["left"][0].assert_called_once()
+        mock_callback.assert_called_once()
 
     def test_call_close_event(self, browser):
         event = MagicMock()
@@ -332,8 +343,14 @@ class TestGenericBrowser:
         browser(event)
         assert browser.memoryslots._list["1"] == 2
 
-    def test_show_key_bindings(self, browser):
-        browser.show_key_bindings("new")
+    def test_show_key_bindings(self, browser, capsys):
+        # On Agg there's no Qt window; show_key_bindings falls back to
+        # printing a formatted table to stdout.
+        browser.set_default_keybindings()
+        browser.show_key_bindings()
+        out = capsys.readouterr().out
+        assert "[Navigation]" in out
+        assert "[View]" in out
 
 
 class TestStateVariableWidgetHint:

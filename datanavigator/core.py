@@ -11,15 +11,66 @@ from __future__ import annotations
 
 import inspect
 import io
+from dataclasses import dataclass
+from typing import Callable, Optional
 
 import matplotlib as mpl
 from matplotlib import axes as maxes
 from matplotlib import pyplot as plt
 
-from . import utils
 from ._qt import find_qt_window
 from .assets import Buttons, MemorySlots, Selectors, StateVariables
 from .events import Events
+
+
+@dataclass
+class KeyBinding:
+    """One entry in :attr:`GenericBrowser._keypressdict`.
+
+    ``group`` drives the section header in
+    :meth:`GenericBrowser.show_key_bindings` (``None`` falls into the
+    "Other" section, rendered last). ``on_button`` opts the binding into
+    button-face hint rendering: the cheatsheet dialog *and* a matching
+    button get the shortcut shown alongside the action.
+
+    Pre-rc2 this slot was a ``(callback, description)`` tuple; the
+    dataclass is a hard cut — no tuple-style backward compat. Downstream
+    callers that poke ``_keypressdict`` directly (rare) need to migrate
+    to attribute access.
+    """
+
+    callback: Callable
+    description: str
+    group: Optional[str] = None
+    on_button: bool = False
+
+
+def _group_keybindings(keypressdict: dict) -> list[tuple[str, list[tuple[str, str]]]]:
+    """Bucket ``keypressdict`` entries by ``KeyBinding.group``.
+
+    Preserves insertion order within and between buckets. The ``None``
+    group (becomes "Other") is always pushed to the end so explicitly
+    named sections lead.
+    """
+    buckets: dict[Optional[str], list[tuple[str, str]]] = {}
+    for shortcut, kb in keypressdict.items():
+        buckets.setdefault(kb.group, []).append((shortcut, kb.description))
+    other = buckets.pop(None, None)
+    sections = [(g or "Other", rows) for g, rows in buckets.items()]
+    if other is not None:
+        sections.append(("Other", other))
+    return sections
+
+
+def _format_keybindings_text(keypressdict: dict) -> str:
+    """Render the cheatsheet as plain text. Used by the non-Qt fallback."""
+    lines = []
+    for group_name, rows in _group_keybindings(keypressdict):
+        lines.append(f"[{group_name}]")
+        for shortcut, description in rows:
+            lines.append(f"  {shortcut:<14} {description}")
+        lines.append("")
+    return "\n".join(lines).rstrip()
 
 
 class GenericBrowser:
@@ -67,7 +118,8 @@ class GenericBrowser:
         # tracking variable
         self._current_idx = 0
 
-        self._keybindingtext = None
+        # Holds the modeless cheatsheet dialog so it isn't GC'd while open.
+        self._keybinding_dialog = None
         self.buttons = Buttons(parent=self)
         self.selectors = Selectors(parent=self)
         self.memoryslots = MemorySlots(parent=self)
@@ -133,7 +185,7 @@ class GenericBrowser:
         if event.name == "key_press_event":
             key = self._resolve_keypress(event.key)
             if key is not None:
-                f = self._keypressdict[key][0]
+                f = self._keypressdict[key].callback
                 argspec = inspect.getfullargspec(f)[0]
                 if len(argspec) == 2 and argspec[1] == "event":
                     f(event)
@@ -203,21 +255,60 @@ class GenericBrowser:
         plt.draw()
 
     def add_key_binding(
-        self, key_name: str, on_press_function: callable, description: str = None
+        self,
+        key_name: str,
+        on_press_function: callable,
+        description: str = None,
+        *,
+        group: Optional[str] = None,
+        on_button: bool = False,
     ):
         """
-        Add key bindings to the browser.
+        Add a key binding to the browser.
 
         Args:
-            key_name (str): Key to bind.
-            on_press_function (callable): Function to call when the key is pressed.
-            description (str, optional): Description of the key binding. Defaults to None.
+            key_name: Key to bind (matplotlib key-event string, e.g. "s",
+                "ctrl+a", "shift+left").
+            on_press_function: Function to call when the key is pressed.
+            description: Human-readable label shown in the cheatsheet.
+                Defaults to ``on_press_function.__name__``.
+            group: Section header in the cheatsheet dialog. ``None``
+                falls into the "Other" section (rendered last).
+            on_button: When ``True``, find a button whose ``action_func``
+                is *identically* ``on_press_function`` and append
+                ``"  ({key_name})"`` to its label. The match is by ``is``
+                comparison — pass the same callable object to both
+                :meth:`Buttons.add` and this method (no intermediate
+                lambdas) or the hint won't attach. Resolution is
+                symmetric: if the button is added *after* the binding,
+                :meth:`Buttons.add` performs the same scan.
         """
         if description is None:
             description = on_press_function.__name__
         self.mpl_remove_bindings([key_name])
-        self._keypressdict[key_name] = (on_press_function, description)
-    
+        self._keypressdict[key_name] = KeyBinding(
+            callback=on_press_function,
+            description=description,
+            group=group,
+            on_button=on_button,
+        )
+        if on_button:
+            self._apply_button_hint(key_name, on_press_function)
+
+    def _apply_button_hint(self, key_name: str, callback: Callable) -> None:
+        """Append a shortcut hint to any already-added button matching ``callback``.
+
+        Called from :meth:`add_key_binding` when ``on_button=True`` and
+        from :meth:`Buttons.add` (via the reverse-direction scan). The
+        match is by ``is`` identity against the per-button
+        ``_action_funcs`` list that :meth:`Buttons.add` populates.
+        """
+        from .assets import apply_shortcut_hint
+        for btn in getattr(self.buttons, "_list", []):
+            action_funcs = getattr(btn, "_action_funcs", ())
+            if any(af is callback for af in action_funcs):
+                apply_shortcut_hint(btn, key_name)
+
     def remove_key_binding(self, key_name: str):
         """
         Remove a key binding from the browser.
@@ -234,55 +325,66 @@ class GenericBrowser:
 
     def set_default_keybindings(self):
         """Set default key bindings for navigation."""
-        self.add_key_binding("left", self.decrement)
-        self.add_key_binding("right", self.increment)
+        self.add_key_binding("left", self.decrement, group="Navigation")
+        self.add_key_binding("right", self.increment, group="Navigation")
         self.add_key_binding(
             "up",
             (lambda s: s.increment(step=10)).__get__(self),
             description="increment by 10",
+            group="Navigation",
         )
         self.add_key_binding(
             "down",
             (lambda s: s.decrement(step=10)).__get__(self),
             description="decrement by 10",
+            group="Navigation",
         )
         self.add_key_binding(
             "shift+left",
             self.decrement_frac,
             description="step forward by 1/20 of the timeline",
+            group="Navigation",
         )
         self.add_key_binding(
             "shift+right",
             self.increment_frac,
             description="step backward by 1/20 of the timeline",
+            group="Navigation",
         )
-        self.add_key_binding("shift+up", self.go_to_end)
-        self.add_key_binding("shift+down", self.go_to_start)
-        self.add_key_binding("ctrl+c", self.copy_to_clipboard)
+        self.add_key_binding("shift+up", self.go_to_end, group="Navigation")
+        self.add_key_binding("shift+down", self.go_to_start, group="Navigation")
+        self.add_key_binding("ctrl+c", self.copy_to_clipboard, group="File")
         self.add_key_binding(
             "ctrl+k",
-            (lambda s: s.show_key_bindings(f="new", pos="center left")).__get__(self),
+            (lambda s: s.show_key_bindings()).__get__(self),
             description="show key bindings",
+            group="View",
         )
         self.add_key_binding(
             "/",
             (lambda s: s.pan(direction="right")).__get__(self),
             description="pan right",
+            group="View",
         )
         self.add_key_binding(
             ",",
             (lambda s: s.pan(direction="left")).__get__(self),
             description="pan left",
+            group="View",
         )
         self.add_key_binding(
-            "l", (lambda s: s.pan(direction="up")).__get__(self), description="pan up"
+            "l",
+            (lambda s: s.pan(direction="up")).__get__(self),
+            description="pan up",
+            group="View",
         )
         self.add_key_binding(
             ".",
             (lambda s: s.pan(direction="down")).__get__(self),
             description="pan down",
+            group="View",
         )
-        self.add_key_binding("r", self.reset_axes)
+        self.add_key_binding("r", self.reset_axes, group="View")
 
     def increment(self, step: int = 1):
         """
@@ -372,19 +474,25 @@ class GenericBrowser:
         app.clipboard().setImage(QImage.fromData(buf.getvalue()))
         buf.close()
 
-    def show_key_bindings(self, f: str = None, pos: str = "bottom right"):
-        """
-        Show the key bindings.
+    def show_key_bindings(self):
+        """Open the keyboard-shortcut cheatsheet.
 
-        Args:
-            f (str, optional): Figure to show the key bindings in. Defaults to None.
-            pos (str, optional): Position to show the key bindings. Defaults to "bottom right".
+        On a Qt-backed figure: a modeless ``QDialog`` with one section
+        per ``KeyBinding.group`` (insertion order; ``None`` group
+        rendered last as "Other"). Each section is a 2-column table —
+        monospace shortcut on the left, description on the right.
+
+        On non-Qt backends: prints the same content to stdout. The
+        pre-rc2 ``TextView`` overlay is gone; matplotlib doesn't host a
+        nice cheatsheet without the Qt path.
         """
-        f = {None: self.figure, "new": plt.figure()}[f]
-        text = []
-        for shortcut, (_, description) in self._keypressdict.items():
-            text.append(f"{shortcut:<12} - {description}")
-        self._keybindingtext = utils.TextView(text, f, pos=pos)
+        from ._qt import make_keybindings_dialog
+        dialog = make_keybindings_dialog(self.figure, self._keypressdict)
+        if dialog is not None:
+            self._keybinding_dialog = dialog
+            return
+        # Non-Qt fallback: dump to stdout.
+        print(_format_keybindings_text(self._keypressdict))
 
     @staticmethod
     def _filter_sibling_axes(

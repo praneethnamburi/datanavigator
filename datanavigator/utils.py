@@ -233,12 +233,11 @@ class TextView:
             # the figure). DUSTrack hit this with statevariables.
             self._ax = None
             # Still call plt.show(block=False) -- the mpl path's setup()
-            # does this, and consumers rely on it. Notably,
-            # GenericBrowser.show_key_bindings("new") creates a fresh
-            # plt.figure() and then a TextView on it; without plt.show
-            # here the new figure never becomes visible. Found by DUSTrack
-            # live probe: sniffer fires on click, new keybind window
-            # never opens.
+            # does this, and consumers rely on it for fresh figures hosting
+            # a TextView. (Pre-rc2 GenericBrowser.show_key_bindings created a
+            # plt.figure() + TextView on it; rc2 replaces that with the Qt
+            # cheatsheet dialog in :func:`_qt.make_keybindings_dialog`, but
+            # TextView remains in use by statevars / other overlays.)
             plt.show(block=False)
             return
 

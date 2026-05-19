@@ -46,43 +46,17 @@ def main():
     b = GenericBrowser(figure_handle=fig)
     b.set_default_keybindings()
 
-    n_before = len(Gcf.get_all_fig_managers())
-    print(f"figures before show_key_bindings: {n_before}")
-
-    b.show_key_bindings(f="new", pos="center left")
+    b.show_key_bindings()
 
     for _ in range(5):
         app.processEvents()
 
-    n_after = len(Gcf.get_all_fig_managers())
-    print(f"figures after show_key_bindings:  {n_after}")
-    assert n_after == n_before + 1, (
-        f"expected one new figure registered, got {n_after - n_before}"
-    )
-
-    # The new figure is the one b._keybindingtext attached to.
-    new_fig = b._keybindingtext.figure
-    new_window = find_qt_window(new_fig)
-    assert new_window is not None, "new figure has no Qt window"
-    print(f"new figure's QMainWindow.isVisible() = {new_window.isVisible()}")
-    assert new_window.isVisible(), (
-        "new figure's QMainWindow should be visible after show_key_bindings"
-    )
-
-    # Overlay should also be present, with the keybinding text in it.
-    overlay = b._keybindingtext._overlay
-    assert overlay is not None, "TextView should be on Qt overlay path"
-    assert overlay._label.isVisible(), "overlay QLabel should be visible"
-    # Keybinding text should mention 'left' / 'right' / 'ctrl+k'.
-    label_text = overlay._label.text()
-    for needle in ("left", "right", "ctrl+k"):
-        assert needle in label_text, (
-            f"expected keybinding text to mention {needle!r}, got: {label_text!r}"
-        )
-
-    print(f"keybinding label has {len(label_text.splitlines())} lines")
+    dialog = b._keybinding_dialog
+    assert dialog is not None, "show_key_bindings should attach a QDialog"
+    assert dialog.isVisible(), "cheatsheet dialog should be visible"
+    print(f"dialog visible: {dialog.isVisible()}, title: {dialog.windowTitle()!r}")
     print("show_key_bindings smoke OK")
-    plt.close(new_fig)
+    dialog.close()
     plt.close(fig)
     return 0
 

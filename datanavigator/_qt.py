@@ -1448,3 +1448,135 @@ def _make_qt_pick_adapter_class():
             return False
 
     return _QtPickAdapter
+
+
+# ---------------------------------------------------------------------------
+# Keybindings cheatsheet dialog (rc2). Replaces the pre-rc2
+# matplotlib TextView overlay rendered by GenericBrowser.show_key_bindings.
+# ---------------------------------------------------------------------------
+
+
+def make_keybindings_dialog(figure, keypressdict):
+    """Open a modeless Qt dialog showing the cheatsheet for ``keypressdict``.
+
+    Returns the dialog instance (caller should keep a reference; the
+    dialog is non-modal and would be garbage-collected otherwise), or
+    ``None`` on a non-Qt backend so :meth:`GenericBrowser.show_key_bindings`
+    can fall back to stdout.
+
+    Layout: one ``QGroupBox`` per ``KeyBinding.group``, in insertion
+    order; the ``None`` group is rendered last as "Other". Each section
+    is a 2-column borderless ``QTableWidget`` (shortcut · description)
+    with monospace right-aligned shortcuts. The whole stack lives in a
+    ``QScrollArea`` so long lists don't overflow the screen.
+    """
+    qt_window = find_qt_window(figure)
+    if qt_window is None:
+        return None
+    try:
+        cls = _make_keybindings_dialog_class()
+    except ImportError:
+        return None
+    from .core import _group_keybindings
+    sections = _group_keybindings(keypressdict)
+    dialog = cls(qt_window, sections)
+    dialog.show()
+    dialog.raise_()
+    return dialog
+
+
+def _make_keybindings_dialog_class():
+    """Lazy: qtpy import deferred so the module imports without Qt."""
+    from qtpy.QtCore import Qt
+    from qtpy.QtGui import QFont
+    from qtpy.QtWidgets import (
+        QAbstractItemView,
+        QDialog,
+        QGroupBox,
+        QHeaderView,
+        QScrollArea,
+        QTableWidget,
+        QTableWidgetItem,
+        QVBoxLayout,
+        QWidget,
+    )
+
+    class _KeybindingsDialog(QDialog):
+        """Modeless cheatsheet dialog parented to a matplotlib QMainWindow."""
+
+        def __init__(self, parent, sections):
+            super().__init__(parent)
+            self.setWindowTitle("Keyboard shortcuts")
+            self.setModal(False)
+            # Don't steal focus from the matplotlib canvas -- otherwise
+            # the dialog grabs key events the user means for the figure.
+            self.setFocusPolicy(Qt.NoFocus)
+
+            outer = QVBoxLayout(self)
+            outer.setContentsMargins(8, 8, 8, 8)
+
+            scroll = QScrollArea(self)
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QScrollArea.NoFrame)
+            outer.addWidget(scroll)
+
+            content = QWidget()
+            scroll.setWidget(content)
+            inner = QVBoxLayout(content)
+            inner.setContentsMargins(0, 0, 0, 0)
+            inner.setSpacing(8)
+
+            mono = QFont("Consolas")
+            mono.setStyleHint(QFont.Monospace)
+
+            total_rows = 0
+            for group_name, rows in sections:
+                box = QGroupBox(group_name, content)
+                box_layout = QVBoxLayout(box)
+                box_layout.setContentsMargins(8, 4, 8, 4)
+
+                table = QTableWidget(len(rows), 2, box)
+                table.horizontalHeader().hide()
+                table.verticalHeader().hide()
+                table.setShowGrid(False)
+                table.setSelectionMode(QAbstractItemView.NoSelection)
+                table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+                table.setFocusPolicy(Qt.NoFocus)
+                table.setFrameShape(QTableWidget.NoFrame)
+
+                for row, (shortcut, description) in enumerate(rows):
+                    sc_item = QTableWidgetItem(shortcut)
+                    sc_item.setFont(mono)
+                    sc_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                    sc_item.setFlags(Qt.ItemIsEnabled)
+                    table.setItem(row, 0, sc_item)
+
+                    desc_item = QTableWidgetItem(description)
+                    desc_item.setFlags(Qt.ItemIsEnabled)
+                    table.setItem(row, 1, desc_item)
+
+                table.resizeColumnsToContents()
+                table.resizeRowsToContents()
+                table.horizontalHeader().setSectionResizeMode(
+                    0, QHeaderView.ResizeToContents
+                )
+                table.horizontalHeader().setSectionResizeMode(
+                    1, QHeaderView.Stretch
+                )
+                # Fix the table height to its content; the QScrollArea
+                # outside handles overflow for the whole dialog.
+                row_h = table.verticalHeader().defaultSectionSize()
+                table.setFixedHeight(row_h * len(rows) + 4)
+
+                box_layout.addWidget(table)
+                inner.addWidget(box)
+                total_rows += len(rows)
+
+            inner.addStretch(1)
+
+            # Sized for ~all-shortcuts-visible without scrolling on a
+            # typical DUSTrack session (>50 entries); QScrollArea kicks
+            # in past that.
+            self.resize(480, min(720, 80 + total_rows * 22))
+
+    return _KeybindingsDialog

@@ -29,6 +29,43 @@ from typing import Any, Callable, List, Optional, Union
 from .utils import TextView
 
 
+def apply_shortcut_hint(button, key_name: str) -> None:
+    """Append ``"  (key_name)"`` to ``button``'s visible label.
+
+    Used by the keybinding cheatsheet wiring: when a binding declared
+    ``on_button=True`` matches a button (by ``action_func`` identity),
+    we want the shortcut visible on the button face. Handles both
+    backends:
+
+    - mpl :class:`Button` / :class:`ToggleButton` carry a
+      :class:`matplotlib.text.Text` label at ``.label``. Toggle buttons
+      rebuild the label every state flip via :meth:`set_text`; we patch
+      ``.name`` so the suffix survives across toggles.
+    - The Qt-path ``_QtPushButton`` / ``_QtToggleButton`` wrappers (in
+      :mod:`._qt`) expose ``.name`` + ``._qt_btn``; we mutate ``.name``
+      and call ``setText`` (push) or ``set_text()`` (toggle, which
+      rebuilds from ``name``).
+
+    Idempotent on the same ``key_name``: if the suffix is already
+    present, returns without re-appending.
+    """
+    suffix = f"  ({key_name})"
+    current_name = getattr(button, "name", "")
+    if current_name.endswith(suffix):
+        return
+    new_name = current_name + suffix
+    button.name = new_name
+    if isinstance(button, ToggleButton):
+        button.set_text()
+    elif isinstance(button, Button):
+        button.label.set_text(new_name)
+    elif hasattr(button, "_qt_btn"):
+        if hasattr(button, "set_text") and getattr(button, "_state", None) is not None:
+            button.set_text()  # toggle wrapper rebuilds from .name
+        else:
+            button._qt_btn.setText(new_name)
+
+
 class Button(ButtonWidget):
     """Add a 'name' state to a matplotlib widget button."""
 
@@ -256,12 +293,29 @@ class Buttons(AssetContainer):
             else:
                 b = Button(plt.axes(pos), text, **kwargs)
 
+        # Record the action callables so add_key_binding(... on_button=True)
+        # can match later (or so the reverse scan below can match an
+        # already-registered binding to this newly-added button).
+        b._action_funcs = []
         if action_func is not None:  # more than one can be attached
             if isinstance(action_func, (list, tuple)):
                 for af in action_func:
                     b.on_clicked(af)
+                    b._action_funcs.append(af)
             else:
                 b.on_clicked(action_func)
+                b._action_funcs.append(action_func)
+
+        # Reverse direction: if any pre-registered KeyBinding has
+        # on_button=True and points at one of this button's action_funcs,
+        # apply the shortcut hint now. Handles "binding declared first,
+        # button added later".
+        keypressdict = getattr(self.parent, "_keypressdict", None) or {}
+        for shortcut, kb in keypressdict.items():
+            if not getattr(kb, "on_button", False):
+                continue
+            if any(af is kb.callback for af in b._action_funcs):
+                apply_shortcut_hint(b, shortcut)
 
         return super().add(b)
 
