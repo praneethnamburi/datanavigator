@@ -28,6 +28,33 @@ Two harnesses:
 | 1.4.0-qt (both)                      | 128.6     | 128.8   | 130.8  | 7.8          | 1.10x   |
 | 1.4.0-qt + cache_quick_wins          | 93.8      | 93.8    | 95.9   | 10.7         | **1.51x** |
 | 1.5.0-fast-render Tier 2             | 36.0      | 36.0    | 37.2   | 27.8         | **3.94x** |
+| 1.4.0rc1 / 1.1.0rc1 (rerun 2026-05-19, pia02 vid) | 38.1 | 38.7 | 43.2 | 26.2 | 3.71x |
+| **1.4.0rc2 / 1.1.0rc2** (2026-05-19, pia02 vid)   | **46.7** | **47.1** | **50.5** | **21.4** | **3.03x** |
+
+The bottom two rows were measured on `pia02_s001_007_LFA2.mp4` —
+`g.video_list[0]` is now a pia02 video on this DLC project (which
+grew to 120 videos). The rc1 rerun (38.1 ms) reproduces the published
+1.5.0-fast-render Tier 2 baseline (36.0 ms) within ~5%, so the
+videos are perf-equivalent and the rc1↔rc2 delta is directly
+comparable.
+
+**rc2 regression vs rc1, accepted as the cost of new features.**
+The +8.6 ms / +22% jump from rc1 to rc2 is the price of the rc2
+UX surface (workflow-grouped sidebar, EnhanceWidget with two sliders
++ None/Auto, ConfirmOverlay, save-on-close guard, layer-lifecycle
+buttons, statevars promoted from QLabel overlay to full Qt widget
+with dropdown/toggle controls). Probe 11 ran on both branches with
+`fast_render=False` to isolate the dnav-side segments: cache-keyed
+segments (`annotation_visibility` 0.28 → 0.33 ms, `frame_marker`
+0.02 → 0.02 ms) confirm the `_TrackedFrameDict` mutation guard is
+NOT a contributor. The cost lives in **`update_assets`** (1.38 → 3.01
+ms; sidebar grew from a flat list to five workflow groups + the new
+EnhanceWidget), **`statevars_display`** (0.20 → 0.51 ms; Qt
+widget replaces QLabel overlay), and the **Qt raster drain on the
+fast_render path** (the bigger sidebar + statevars widget cost extra
+paint events drained in `process_events`). Tradeoff judged worth
+it 2026-05-19 — rc2 ships at ~21 fps which is still well above the
+interactive threshold and the UX value bought is high.
 
 ### How the cache_quick_wins layer fits in
 
@@ -383,3 +410,75 @@ Summary table above.
 | min | median | mean | p95 | p99 | max | fps (median) |
 |---|---|---|---|---|---|---|
 | 34.43 | 35.97 | 36.03 | 37.21 | 37.97 | 39.82 | 27.8 |
+
+### DUSTrack UI -- 1.4.0rc1 / 1.1.0rc1 rerun -- 2026-05-19
+
+- datanavigator: `HEAD@1e8fa51` (tag `v1.4.0rc1`) source `C:\dev\datanavigator\datanavigator\__init__.py`
+- dustrack: `HEAD@29775c0` (tag `v1.1.0rc1`) source `C:\dev\DUSTrack\dustrack\__init__.py`
+- backend: QtAgg, qt_api=pyside6, qt_plat=default
+- fast_render: True (default)
+- video: `pia02_s001_007_LFA2.mp4` (g.video_list[0], 36,715 frames)
+- N=185 (15 warmup discarded)
+- purpose: rerun of the rc1 baseline on the same env / video / harness
+  as the rc2 measurement below, so the rc1↔rc2 delta is apples-to-apples.
+
+| min | median | mean | p95 | p99 | max | fps (median) |
+|---|---|---|---|---|---|---|
+| 35.85 | 38.13 | 38.68 | 43.15 | 48.12 | 49.16 | 26.2 |
+
+### DUSTrack UI -- 1.4.0rc2 / 1.1.0rc2 -- 2026-05-19
+
+- datanavigator: `1.4.0rc2@c5bcbd0` source `C:\dev\datanavigator\datanavigator\__init__.py`
+- dustrack: `main@e8e9653-dirty` (a tiny dlcinterface.py edit committed
+  shortly after as `a03877c`; not material to the per-frame budget)
+  source `C:\dev\DUSTrack\dustrack\__init__.py`
+- backend: QtAgg, qt_api=pyside6, qt_plat=default
+- fast_render: True (default)
+- video: `pia02_s001_007_LFA2.mp4` (g.video_list[0], 36,715 frames)
+- N=185 (15 warmup discarded)
+- delta vs rc1 rerun above: **+8.58 ms median (+22.5%), -4.8 fps median (-18.3%)**.
+  Root-causing (see summary table commentary above + probe 11
+  segment diff below) attributes the regression to the rc2 UX
+  additions (workflow-grouped sidebar, statevars Qt widget,
+  EnhanceWidget, layer-lifecycle buttons) and **not** to the
+  `_TrackedFrameDict` mutation guard. Accepted 2026-05-19 as the
+  cost of the new UX surface; gates the 1.4.0 / 1.1.0 final cut
+  on no *further* regression beyond this point.
+
+| min | median | mean | p95 | p99 | max | fps (median) |
+|---|---|---|---|---|---|---|
+| 44.69 | 46.71 | 47.09 | 50.50 | 53.53 | 61.70 | 21.4 |
+
+### Probe 11 segment diff -- rc1 vs rc2 -- 2026-05-19
+
+Ran `tests/qt_learning/11_profile_dustrack_update.py`'s logic with
+`fast_render=False` (the canonical probe was written before
+fast_render became default-on and crashes on `_im = None` when it's
+on; the dnav-side segments measured are identical with or without
+fast_render — fast_render only swaps the image pane). Same env,
+same video, 185 measured frames each.
+
+| Segment                  | rc1 ms | rc2 ms | Δ ms   | Notes |
+|--------------------------|-------:|-------:|-------:|-------|
+| annotation_visibility    |  0.28  |  0.33  |  +0.05 | flat — mutation guard NOT a contributor |
+| statevars_display        |  0.20  |  0.51  |  +0.31 | new Qt statevars widget replaces QLabel overlay |
+| frame_marker             |  0.02  |  0.02  |   0.00 | flat — cache invariant holds |
+| decode                   |  7.69  |  7.74  |  +0.05 | flat — PyAV decode unchanged |
+| image_process            |  0.99  |  0.00  |  -0.99 | rc2 default opens raw (clahe=1.0/gamma=1.0); bypass branch fires |
+| imshow_set_data          |  0.77  |  0.90  |  +0.13 | small |
+| title                    |  0.13  |  0.17  |  +0.04 | small |
+| update_assets            |  1.38  |  3.01  |  +1.63 | sidebar grew: workflow groups + EnhanceWidget + new buttons |
+| plt_draw                 |  0.00  |  0.00  |   0.00 | flat |
+| process_events (raster)  | 81.69  | 83.07  |  +1.38 | small on mpl path; the bulk of fast_render-path regression lives here on the production path |
+| **TOTAL (mpl path)**     | **93.40** | **95.90** | **+2.50** | mpl path: ~2.5 ms regression |
+| (TOTAL fast_render path) | (38.13) | (46.71) | (+8.58) | for reference — production hot path |
+
+The ~6 ms gap between the mpl-path regression (+2.5 ms) and the
+fast_render-path regression (+8.6 ms) is most likely extra Qt paint
+events drained in `process_events` on the fast_render path, caused
+by the same expanded sidebar + statevars widget that show up in
+`update_assets` and `statevars_display` on the mpl path. Could be
+recovered by caching the per-frame asset push or auditing
+paint-event frequency for the new widgets — deferred to 1.5.0's
+`fast_traces` work or a `1.x.x` patch if the workflow ever runs
+into the headroom.
