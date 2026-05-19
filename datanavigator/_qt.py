@@ -783,6 +783,58 @@ def make_qt_button(figure, name: str, type_: str = "Push", start_state: bool = T
     return push_cls(container, name)
 
 
+def make_qt_button_row(figure, specs):
+    """Build N Qt buttons side-by-side in one row of the buttons column.
+
+    Counterpart to :func:`make_qt_button` for :meth:`assets.Buttons.add_multi`.
+    Creates a child ``QWidget`` + ``QHBoxLayout`` (one row), adds it to
+    the column's ``QVBoxLayout`` -- so the row occupies a single
+    vertical slot regardless of how many buttons it carries -- then
+    instantiates one ``_QtPushButton`` / ``_QtToggleButton`` per spec
+    with that row widget as the container. Each wrapper's ``__init__``
+    appends its underlying ``QPushButton`` to the row's QHBoxLayout
+    (the same ``container.layout().addWidget`` line that makes the
+    single-button path work, just with a horizontal layout this time).
+
+    Returns the list of wrapper objects (in spec order), or ``None`` if
+    no Qt window / qtpy binding is available so the caller can fall
+    back to mpl placement.
+
+    Each spec is a dict of kwargs from :meth:`assets.Buttons.add_multi`;
+    we read ``text`` / ``type_`` / ``start_state`` here and ignore the
+    rest (the caller's ``_finalize_button`` does action wiring).
+    """
+    qt_window = find_qt_window(figure)
+    if qt_window is None:
+        return None
+    try:
+        push_cls, toggle_cls = _make_qt_button_classes()
+        from qtpy.QtWidgets import QHBoxLayout, QWidget
+    except ImportError:
+        return None
+    column = _get_buttons_widget(qt_window)
+    row_widget = QWidget(column)
+    row_layout = QHBoxLayout(row_widget)
+    # Match the column's inner-row rhythm: zero outer margins, a small
+    # gap between buttons. spacing=4 mirrors the column's inter-row
+    # spacing set in _get_left_column (outer.setSpacing(8) is between
+    # *sections*; the buttons sub-layout uses 4 -- see _qt.py:353).
+    row_layout.setContentsMargins(0, 0, 0, 0)
+    row_layout.setSpacing(4)
+    column.layout().addWidget(row_widget)
+
+    out = []
+    for spec in specs:
+        text = spec.get("text", "Button")
+        type_ = spec.get("type_", "Push")
+        if type_ == "Toggle":
+            start_state = spec.get("start_state", True)
+            out.append(toggle_cls(row_widget, text, start_state=bool(start_state)))
+        else:
+            out.append(push_cls(row_widget, text))
+    return out
+
+
 # ---------------------------------------------------------------------------
 # 1.5.0 fast_render -- Qt-native video + scatter pane.
 # ---------------------------------------------------------------------------

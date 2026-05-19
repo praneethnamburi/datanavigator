@@ -139,6 +139,66 @@ def test_buttons_add_separator_mpl_path():
     assert b.buttons.add_separator() is None
 
 
+def test_buttons_add_multi_mpl_row_layout():
+    """add_multi(N) under Agg lays N buttons at the same y, dividing the
+    row width evenly, and bumps the row cursor by 1 so the following
+    add() lands on the next row (not N rows down).
+    """
+    from datanavigator.assets import Button
+    b = GenericBrowser(figure_handle=plt.figure())
+    b.buttons.add(text="top")
+    row = b.buttons.add_multi(dict(text="a"), dict(text="b"), dict(text="c"))
+    b.buttons.add(text="after")
+
+    assert len(b.buttons) == 5  # top + a + b + c + after
+    assert [bn.name for bn in b.buttons._list] == ["top", "a", "b", "c", "after"]
+    assert all(isinstance(bn, Button) for bn in row)
+
+    # All three row buttons share the same y and the same height.
+    y_top = b.buttons["top"].ax.get_position().y0
+    ys = [bn.ax.get_position().y0 for bn in row]
+    assert len(set(round(y, 9) for y in ys)) == 1, f"row buttons should share y: {ys}"
+    # Row y is one slot below the "top" button.
+    assert ys[0] < y_top
+    # "after" should be one slot below the row (cursor bump == 1), so its
+    # y is exactly one slot below the row's y -- *not* three slots below.
+    y_after = b.buttons["after"].ax.get_position().y0
+    step_top_to_row = y_top - ys[0]
+    step_row_to_after = ys[0] - y_after
+    assert abs(step_top_to_row - step_row_to_after) < 1e-9, \
+        f"row should consume one slot: step_top_to_row={step_top_to_row} step_row_to_after={step_row_to_after}"
+
+    # Per-button widths divide the single-button width evenly (with a
+    # small inter-button gap). All three should be the same width.
+    widths = [bn.ax.get_position().width for bn in row]
+    assert len(set(round(w, 9) for w in widths)) == 1, f"row widths uneven: {widths}"
+    full_w = b.buttons["top"].ax.get_position().width
+    assert widths[0] < full_w / 2, \
+        f"per-button width {widths[0]} should be much less than full {full_w}"
+
+
+def test_buttons_add_multi_empty_and_single_mpl():
+    """add_multi() -> []; add_multi(one_spec) -> single full-width button."""
+    b = GenericBrowser(figure_handle=plt.figure())
+    assert b.buttons.add_multi() == []
+    assert len(b.buttons) == 0
+
+    out = b.buttons.add_multi(dict(text="lonely"))
+    assert len(out) == 1 and out[0].name == "lonely"
+    assert len(b.buttons) == 1
+    # Single-spec falls through to add(), so width matches a normal add().
+    expected_w = b.buttons.add(text="ref").ax.get_position().width
+    assert abs(out[0].ax.get_position().width - expected_w) < 1e-9
+
+
+def test_buttons_add_multi_rejects_per_spec_pos():
+    """Per-spec pos= is rejected -- row layout incompatible with explicit
+    absolute placement."""
+    b = GenericBrowser(figure_handle=plt.figure())
+    with pytest.raises(ValueError, match="pos"):
+        b.buttons.add_multi(dict(text="ok"), dict(text="bad", pos=(0.1, 0.1, 0.2, 0.05)))
+
+
 def test_buttons_use_mpl_path_under_agg():
     """Soft Qt mode: under Agg, Buttons.add returns mpl widgets, not Qt wrappers.
 

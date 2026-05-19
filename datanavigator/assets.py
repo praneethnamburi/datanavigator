@@ -236,7 +236,20 @@ class Buttons(AssetContainer):
     they just miss the Phase 3 perf win. Browsers that take a
     figure_handle (the common case) are unaffected, because the figure
     is fully constructed before any button is added.
+
+    rc2 row-cursor note: ``_mpl_row_cursor`` tracks the next vertical
+    slot for the mpl-fallback layout independent of ``len(self)``.
+    ``add()`` and ``add_separator()`` used to derive y from ``len(self)``,
+    which assumed one button per row. ``add_multi()`` (one row, N
+    buttons) breaks that assumption, so the cursor is bumped by 1 per
+    row (regardless of how many buttons land on it) while ``len(self)``
+    still grows by N. For single-add-only flows the two stay equal,
+    preserving pre-rc2 placement.
     """
+
+    def __init__(self, parent: Any) -> None:
+        super().__init__(parent)
+        self._mpl_row_cursor = 0
 
     def add(
         self,
@@ -273,7 +286,6 @@ class Buttons(AssetContainer):
 
         if b is None:
             # mpl fallback (the pre-1.4 path).
-            nbtn = len(self)
             if pos is None:  # start adding at the top left corner
                 parent_fig = self.parent.figure
                 mul_factor = 6.4 / parent_fig.get_size_inches()[0]
@@ -281,6 +293,7 @@ class Buttons(AssetContainer):
                 btn_w = w * mul_factor
                 btn_h = h * mul_factor
                 btn_buf = buf
+                nbtn = self._mpl_row_cursor
                 pos = (
                     btn_buf,
                     (1 - btn_buf) - ((btn_buf + btn_h) * (nbtn + 1)),
@@ -293,6 +306,23 @@ class Buttons(AssetContainer):
             else:
                 b = Button(plt.axes(pos), text, **kwargs)
 
+        self._finalize_button(b, action_func)
+        self._mpl_row_cursor += 1
+        return super().add(b)
+
+    def _finalize_button(
+        self,
+        b: Any,
+        action_func: Optional[Union[Callable, List[Callable]]],
+    ) -> None:
+        """Wire action callbacks + reverse-resolve any pre-registered keybinding.
+
+        Shared post-construction tail for :meth:`add` and :meth:`add_multi`.
+        Mutates ``b`` in place: sets ``b._action_funcs`` (a list, even when
+        zero or one callable was passed), connects every callable via
+        ``on_clicked``, and applies a shortcut-hint suffix to the label if
+        the parent already has a matching ``on_button=True`` KeyBinding.
+        """
         # Record the action callables so add_key_binding(... on_button=True)
         # can match later (or so the reverse scan below can match an
         # already-registered binding to this newly-added button).
@@ -317,7 +347,99 @@ class Buttons(AssetContainer):
             if any(af is kb.callback for af in b._action_funcs):
                 apply_shortcut_hint(b, shortcut)
 
-        return super().add(b)
+    def add_multi(self, *specs: dict) -> List[Any]:
+        """Add N buttons side-by-side in a single row.
+
+        Each ``spec`` is a dict of kwargs accepted by :meth:`add` --
+        typically ``{text=..., action_func=..., type_=...}``. Returns the
+        list of created button objects in spec order.
+
+        On the Qt path, all N buttons are children of a single QWidget
+        with a QHBoxLayout inserted into the buttons column's
+        QVBoxLayout; the row therefore consumes one vertical slot in the
+        sidebar regardless of N. On the mpl fallback path, the row's
+        width is divided evenly across N buttons at a shared y, and
+        ``_mpl_row_cursor`` is bumped by 1 (not N) so a following
+        :meth:`add` lands on the next row, not N rows down.
+
+        Edge cases:
+        - ``add_multi()`` with no specs is a no-op and returns ``[]``.
+        - ``add_multi(one_spec)`` is equivalent to ``add(**one_spec)`` --
+          full-width single button -- and returns a one-element list.
+        - Per-spec ``pos=`` is rejected (row layout is the whole point;
+          explicit ``pos`` is a single-button-only escape hatch).
+        """
+        if not specs:
+            return []
+        for i, spec in enumerate(specs):
+            if not isinstance(spec, dict):
+                raise TypeError(
+                    f"add_multi: spec {i} is {type(spec).__name__!r}; "
+                    f"expected dict of add() kwargs."
+                )
+            if "pos" in spec and spec["pos"] is not None:
+                raise ValueError(
+                    f"add_multi: spec {i} carries pos={spec['pos']!r}; "
+                    f"per-spec pos= is incompatible with row layout. "
+                    f"Use add() for explicit-position single buttons."
+                )
+
+        # Single-spec degenerate case: fall through to add() so geometry,
+        # Qt-vs-mpl branching, and finalization are byte-identical to the
+        # one-button path. Wrap the lone return in a list for API totality.
+        if len(specs) == 1:
+            return [self.add(**specs[0])]
+
+        # Qt path -- one row widget hosts N buttons.
+        from ._qt import make_qt_button_row
+        parent_fig = self.parent.figure
+        row_buttons = make_qt_button_row(parent_fig, specs)
+
+        if row_buttons is None:
+            # mpl fallback -- divide one row's width across N buttons at a
+            # shared y. Width / height / outer buf come from spec 0 (matches
+            # the convention of "the row is one logical add() call").
+            spec0 = specs[0]
+            w = spec0.get("w", 0.25)
+            h = spec0.get("h", 0.05)
+            buf = spec0.get("buf", 0.01)
+            mul_factor = 6.4 / parent_fig.get_size_inches()[0]
+            btn_w = w * mul_factor
+            btn_h = h * mul_factor
+            btn_buf = buf
+            n = len(specs)
+            # Inter-button horizontal gap: reuse btn_buf for a uniform look.
+            x_gap = btn_buf
+            per_btn_w = (btn_w - (n - 1) * x_gap) / n
+            nbtn = self._mpl_row_cursor
+            y = (1 - btn_buf) - ((btn_buf + btn_h) * (nbtn + 1))
+
+            row_buttons = []
+            for i, spec in enumerate(specs):
+                text = spec.get("text", "Button")
+                type_ = spec.get("type_", "Push")
+                assert type_ in ("Push", "Toggle")
+                spec_extra = {
+                    k: v for k, v in spec.items()
+                    if k not in ("text", "action_func", "pos", "w", "h", "buf", "type_")
+                }
+                x = btn_buf + i * (per_btn_w + x_gap)
+                pos = (x, y, per_btn_w, btn_h)
+                if type_ == "Toggle":
+                    b = ToggleButton(plt.axes(pos), text, **spec_extra)
+                else:
+                    b = Button(plt.axes(pos), text, **spec_extra)
+                row_buttons.append(b)
+
+        # Finalize each button (action_func wiring + keybinding-hint reverse
+        # scan) and register with the container. One row -> cursor += 1.
+        out = []
+        for spec, b in zip(specs, row_buttons):
+            self._finalize_button(b, spec.get("action_func"))
+            super().add(b)
+            out.append(b)
+        self._mpl_row_cursor += 1
+        return out
 
     def add_separator(
         self, name: Optional[str] = None, style: str = "single",
@@ -356,7 +478,7 @@ class Buttons(AssetContainer):
             slot_name = name if (n_slots == 1) else f"{name}_{slot_i}" if name else None
             if slot_name is None:
                 slot_name = f"__separator_{len(self)}"
-            nbtn = len(self)
+            nbtn = self._mpl_row_cursor
             parent_fig = self.parent.figure
             mul_factor = 6.4 / parent_fig.get_size_inches()[0]
             btn_w = 0.25 * mul_factor
@@ -373,6 +495,7 @@ class Buttons(AssetContainer):
             spacer.label.set_visible(False)
             spacer.ax.axis("off")
             super().add(spacer)
+            self._mpl_row_cursor += 1
 
 
 class Selectors(AssetContainer):

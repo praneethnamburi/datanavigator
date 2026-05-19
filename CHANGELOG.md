@@ -13,6 +13,22 @@ interactive UI, no scattered widgets across the QMainWindow's dock
 areas.
 
 ### Added
+- `Buttons.add_multi(*specs)` -- N buttons side-by-side in a single
+  row. Each `spec` is a dict of kwargs accepted by `Buttons.add()`
+  (`text=`, `action_func=`, `type_=`, ...); the call returns the list
+  of created buttons in spec order. On the Qt path a child QWidget
+  with a QHBoxLayout hosts the row inside the buttons column (new
+  `_qt.make_qt_button_row(figure, specs)` helper), so the row
+  consumes exactly one vertical slot regardless of N. On the mpl
+  fallback the row's width is divided evenly across N buttons at a
+  shared y. A new lazy `Buttons._mpl_row_cursor` separates "row
+  index used for y placement" from "button count" so `add_multi`
+  (one row, N buttons) and `add_separator(style="double")` (one call,
+  two slots) keep the mpl-path vertical rhythm correct; for
+  single-button-only flows the cursor equals `len(self)` throughout,
+  preserving pre-rc2 placement. First consumers: DUSTrack's
+  "Trace: line / Trace: dot" and "Freeze plot axes / Unfreeze plot
+  axes" pairs (reclaims one sidebar row each).
 - `Buttons.add_separator(name=None, style="single")` takes a new
   `style` kwarg. `"single"` (default) is the pre-existing single
   sunken `QFrame.HLine`; `"double"` builds two stacked HLines (via
