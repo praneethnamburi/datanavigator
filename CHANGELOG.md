@@ -80,6 +80,22 @@ areas.
   `QFrame.HLine` into the buttons `QVBoxLayout` (pre-rc2:
   `QToolBar.addSeparator()` `QAction`). Visual is equivalent;
   separator detection in tests now walks layout items.
+- `VideoAnnotation.set_plot_type(type_)` now records the choice on
+  `self._plot_type` in addition to applying the visual style; the
+  `plot_type` property setter becomes a thin delegate so the two
+  APIs are symmetric. Pre-fix, `set_plot_type("line")` only
+  updated trace handle linestyle/marker, leaving `_plot_type` at
+  its `__init__` default `"dot"`; the next `re_setup_display`
+  (which fires on every existing layer inside
+  `add_annotation_layers`) called `setup_display` → `set_plot_type
+  (self.plot_type)`, read the stale `"dot"`, and reverted the
+  visual. Manifested as the DUSTrack `dlccorr` "renders as dots
+  after Reduce jitter" regression: `apply_manual_corrections` set
+  dlccorr to line via the method (visual only); adding the LK
+  output layer triggered `re_setup_display` on every layer,
+  including dlccorr, which then reverted to dot. Two new tests in
+  `tests/test_pointtracking.py` guard the sync and the
+  re-setup-survival.
 - `VideoPointAnnotator` non-fast_render path: the matplotlib gridspec
   drops its dedicated state-variables column. Layout shrinks from
   `3x2 width_ratios=[1, 4]` to `3x1`; the image axis is now
