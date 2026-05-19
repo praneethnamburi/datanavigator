@@ -45,27 +45,48 @@ class KeyBinding:
     on_button: bool = False
 
 
-def _group_keybindings(keypressdict: dict) -> list[tuple[str, list[tuple[str, str]]]]:
+def _group_keybindings(
+    keypressdict: dict,
+    section_order: Optional[tuple[str, ...]] = None,
+) -> list[tuple[str, list[tuple[str, str]]]]:
     """Bucket ``keypressdict`` entries by ``KeyBinding.group``.
 
-    Preserves insertion order within and between buckets. The ``None``
-    group (becomes "Other") is always pushed to the end so explicitly
-    named sections lead.
+    Within each bucket, entries follow ``keypressdict`` iteration order
+    (i.e. insertion order). Between buckets:
+
+    - If ``section_order`` is given, those group names lead, in that
+      order. Groups not in ``section_order`` follow in insertion order.
+    - If ``section_order`` is ``None``, all named groups follow
+      insertion order.
+
+    The ``None`` group (becomes "Other") is always pushed to the end so
+    explicitly named sections lead.
     """
     buckets: dict[Optional[str], list[tuple[str, str]]] = {}
     for shortcut, kb in keypressdict.items():
         buckets.setdefault(kb.group, []).append((shortcut, kb.description))
+
     other = buckets.pop(None, None)
-    sections = [(g or "Other", rows) for g, rows in buckets.items()]
+    if section_order:
+        leading = [
+            (g, buckets.pop(g)) for g in section_order if g in buckets
+        ]
+        sections = leading + list(buckets.items())
+    else:
+        sections = list(buckets.items())
+    sections = [(g or "Other", rows) for g, rows in sections]
     if other is not None:
         sections.append(("Other", other))
     return sections
 
 
-def _format_keybindings_text(keypressdict: dict) -> str:
+def _format_keybindings_text(
+    keypressdict: dict,
+    section_order: Optional[tuple[str, ...]] = None,
+) -> str:
     """Render the cheatsheet as plain text. Used by the non-Qt fallback."""
     lines = []
-    for group_name, rows in _group_keybindings(keypressdict):
+    for group_name, rows in _group_keybindings(keypressdict, section_order):
         lines.append(f"[{group_name}]")
         for shortcut, description in rows:
             lines.append(f"  {shortcut:<14} {description}")
@@ -120,6 +141,11 @@ class GenericBrowser:
 
         # Holds the modeless cheatsheet dialog so it isn't GC'd while open.
         self._keybinding_dialog = None
+        # Optional tuple of group names pinning the cheatsheet section
+        # order. Subclasses (e.g. VideoPointAnnotator) override this so
+        # the dialog reads in workflow order regardless of when each
+        # binding was registered. ``None`` -> insertion order.
+        self._section_order: Optional[tuple[str, ...]] = None
         self.buttons = Buttons(parent=self)
         self.selectors = Selectors(parent=self)
         self.memoryslots = MemorySlots(parent=self)
@@ -353,7 +379,7 @@ class GenericBrowser:
         )
         self.add_key_binding("shift+up", self.go_to_end, group="Navigation")
         self.add_key_binding("shift+down", self.go_to_start, group="Navigation")
-        self.add_key_binding("ctrl+c", self.copy_to_clipboard, group="File")
+        self.add_key_binding("ctrl+c", self.copy_to_clipboard, "Copy screenshot to clipboard")
         self.add_key_binding(
             "ctrl+k",
             (lambda s: s.show_key_bindings()).__get__(self),
@@ -487,12 +513,14 @@ class GenericBrowser:
         nice cheatsheet without the Qt path.
         """
         from ._qt import make_keybindings_dialog
-        dialog = make_keybindings_dialog(self.figure, self._keypressdict)
+        dialog = make_keybindings_dialog(
+            self.figure, self._keypressdict, self._section_order
+        )
         if dialog is not None:
             self._keybinding_dialog = dialog
             return
         # Non-Qt fallback: dump to stdout.
-        print(_format_keybindings_text(self._keypressdict))
+        print(_format_keybindings_text(self._keypressdict, self._section_order))
 
     @staticmethod
     def _filter_sibling_axes(

@@ -78,6 +78,34 @@ def test_group_keybindings_pushes_none_group_to_end():
     assert other_rows == {"b": "beta"}
 
 
+def test_group_keybindings_respects_section_order():
+    """``section_order`` re-orders named buckets; unlisted ones follow,
+    ``None`` still goes last."""
+    kpd = {
+        # Insertion order: First, Other (None), Second, Third
+        "a": KeyBinding(lambda: None, "alpha", group="First"),
+        "b": KeyBinding(lambda: None, "beta"),  # None -> "Other"
+        "c": KeyBinding(lambda: None, "gamma", group="Second"),
+        "d": KeyBinding(lambda: None, "delta", group="Third"),
+    }
+    # Pin Second to lead, then Third; First is not in section_order so it
+    # follows them in insertion order; Other stays last.
+    sections = _group_keybindings(kpd, section_order=("Second", "Third"))
+    names = [name for name, _ in sections]
+    assert names == ["Second", "Third", "First", "Other"]
+
+
+def test_group_keybindings_section_order_with_missing_entries():
+    """Group names in ``section_order`` that don't appear in keypressdict
+    are silently skipped."""
+    kpd = {
+        "a": KeyBinding(lambda: None, "alpha", group="First"),
+    }
+    sections = _group_keybindings(kpd, section_order=("MissingGroup", "First"))
+    names = [name for name, _ in sections]
+    assert names == ["First"]
+
+
 def test_button_hint_binding_first_then_button():
     """Declare the binding, then add the button: hint attaches."""
     b = _make_browser()

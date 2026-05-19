@@ -1456,7 +1456,7 @@ def _make_qt_pick_adapter_class():
 # ---------------------------------------------------------------------------
 
 
-def make_keybindings_dialog(figure, keypressdict):
+def make_keybindings_dialog(figure, keypressdict, section_order=None):
     """Open a modeless Qt dialog showing the cheatsheet for ``keypressdict``.
 
     Returns the dialog instance (caller should keep a reference; the
@@ -1464,11 +1464,13 @@ def make_keybindings_dialog(figure, keypressdict):
     ``None`` on a non-Qt backend so :meth:`GenericBrowser.show_key_bindings`
     can fall back to stdout.
 
-    Layout: one ``QGroupBox`` per ``KeyBinding.group``, in insertion
-    order; the ``None`` group is rendered last as "Other". Each section
-    is a 2-column borderless ``QTableWidget`` (shortcut · description)
-    with monospace right-aligned shortcuts. The whole stack lives in a
-    ``QScrollArea`` so long lists don't overflow the screen.
+    Layout: one ``QGroupBox`` per ``KeyBinding.group``. Section order
+    comes from ``section_order`` (tuple of group names, leading); any
+    groups not listed there follow in insertion order. The ``None``
+    group is rendered last as "Other". Each section is a 2-column
+    borderless ``QTableWidget`` (shortcut · description) with monospace
+    right-aligned shortcuts. The whole stack lives in a ``QScrollArea``
+    so long lists don't overflow the screen.
     """
     qt_window = find_qt_window(figure)
     if qt_window is None:
@@ -1478,7 +1480,7 @@ def make_keybindings_dialog(figure, keypressdict):
     except ImportError:
         return None
     from .core import _group_keybindings
-    sections = _group_keybindings(keypressdict)
+    sections = _group_keybindings(keypressdict, section_order)
     dialog = cls(qt_window, sections)
     dialog.show()
     dialog.raise_()
