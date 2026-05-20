@@ -92,8 +92,21 @@ class FramesSequence:
 
 
 # ---------- BEGIN verbatim from upstream pims/pyav_reader.py ----------
-# The following is the unmodified PyAVReaderIndexed class.
-# Re-sync from upstream by replacing the block below.
+# The following is the PyAVReaderIndexed class, with one deviation from
+# upstream noted inline.
+#
+# Deviation 2026-05-20: ``_load_fresh_file`` and ``_seek_packet`` now
+# keep a persistent ``self._demux`` iterator and advance it via
+# ``next()`` on sequential access. Upstream constructs a fresh
+# ``container.demux(stream)`` iterator on every ``_seek_packet`` call,
+# which on video encoded with ~1 frame per h264 packet (no B-frame
+# reordering — common for medical/scientific video) makes sequential
+# read ~10x slower than ``cv2.VideoCapture.read``. The 2026-05-20
+# dustrack inference bench (``S:/_corpus/dustrack/dlc_inference_bench_2026-05-20/``)
+# saw end-to-end ``analyze_videos`` drop -42% when the decoder was
+# swapped to dnav until this fix landed.
+# Re-sync from upstream by replacing the block below (and re-apply the
+# deviation).
 
 
 def _next_video_packet(container_iter):
@@ -185,8 +198,10 @@ class PyAVReaderIndexed(FramesSequence):
             self.file.seek(0)
 
         self._container = av.open(self.file, format=self.format)
-        demux = self._container.demux(self._video_stream)
-        self._current_packet = _next_video_packet(demux)
+        # Deviation: stash the demux iterator so ``_seek_packet`` can
+        # advance via ``next()`` on sequential access.
+        self._demux = self._container.demux(self._video_stream)
+        self._current_packet = _next_video_packet(self._demux)
         self._current_packet_no = 0
 
     @property
@@ -228,14 +243,25 @@ class PyAVReaderIndexed(FramesSequence):
         # Only seek when needed.
         if packet_no == self._current_packet_no:
             return
-        elif (packet_no < self._current_packet_no
-                or packet_no > self._current_packet_no + 1):
-            self._container.seek(packet_ts, stream=self._video_stream)
+        # Deviation: reuse the persistent demux iterator for the
+        # sequential (current + 1) case. Upstream constructed a fresh
+        # iterator on every call, which dominated cost on
+        # 1-frame-per-packet h264.
+        if packet_no == self._current_packet_no + 1:
+            self._current_packet = _next_video_packet(self._demux)
+            while self._current_packet[0].pts < packet_ts:
+                self._current_packet = _next_video_packet(self._demux)
+            self._current_packet_no = packet_no
+            return
 
-        demux = self._container.demux(self._video_stream)
-        self._current_packet = _next_video_packet(demux)
+        # Random jump (backward or forward by >1 packet): seek, then
+        # restart the demux iterator so subsequent sequential reads
+        # continue to amortise.
+        self._container.seek(packet_ts, stream=self._video_stream)
+        self._demux = self._container.demux(self._video_stream)
+        self._current_packet = _next_video_packet(self._demux)
         while self._current_packet[0].pts < packet_ts:
-            self._current_packet = _next_video_packet(demux)
+            self._current_packet = _next_video_packet(self._demux)
 
         self._current_packet_no = packet_no
 
