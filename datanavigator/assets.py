@@ -674,6 +674,16 @@ class StateVariable:
         self.states = list(states)
         self._current_state_idx = 0
         self.widget = widget
+        # 1.4.0rc2: callbacks fire after every set_state / cycle /
+        # cycle_back regardless of whether the index actually changed.
+        # Covers both keyboard (cycle / set_state via __call__) and Qt
+        # dropdown / toggle (set_state via _QtStatevarsWidget on_pick /
+        # on_click) entry points -- the two surfaces that mutate state.
+        # Direct ``_current_state_idx = ...`` assignments (e.g.
+        # ``select_label_with_mouse``) intentionally bypass; callers
+        # that do this and need a notification must fire one themselves
+        # or follow up with a ``set_state`` on a downstream var.
+        self._on_change_callbacks: list[Callable[[], None]] = []
 
     @property
     def current_state(self) -> Any:
@@ -684,13 +694,30 @@ class StateVariable:
         """Get the number of states."""
         return len(self.states)
 
+    def add_on_change(self, callback: Callable[[], None]) -> None:
+        """Register a no-arg callback fired after state mutations.
+
+        Fires on every :meth:`set_state` / :meth:`cycle` /
+        :meth:`cycle_back` call, regardless of whether the index
+        actually changed -- consumers that need a real-change guard
+        should track the previous value themselves (e.g.
+        :meth:`VideoPointAnnotator._on_active_label_change`).
+        """
+        self._on_change_callbacks.append(callback)
+
+    def _notify_change(self) -> None:
+        for cb in self._on_change_callbacks:
+            cb()
+
     def cycle(self) -> None:
         """Cycle to the next state."""
         self._current_state_idx = (self._current_state_idx + 1) % self.n_states()
+        self._notify_change()
 
     def cycle_back(self) -> None:
         """Cycle to the previous state."""
         self._current_state_idx = (self._current_state_idx - 1) % self.n_states()
+        self._notify_change()
 
     def set_state(self, state: Union[int, str]) -> None:
         """Set the state."""
@@ -700,6 +727,7 @@ class StateVariable:
         if isinstance(state, str):
             assert state in self.states
             self._current_state_idx = self.states.index(state)
+        self._notify_change()
 
 
 class StateVariables(AssetContainer):

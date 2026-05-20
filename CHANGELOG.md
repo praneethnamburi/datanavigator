@@ -315,6 +315,38 @@ QMainWindow's dock areas. (c) closes the bug class that bit
   `[_ax_trace_x, _ax_trace_y]` to scope the refit to the trace pair.
   Regression test: `test_reset_axes_axes_scope_kwarg` in
   `tests/test_core.py`.
+- **Label-aware y-refit for multi-label tracking.** New
+  `VideoPointAnnotator._fit_y_to_active_label` helper computes the
+  y-extent from the active layer's active-label trace (and the overlay
+  layer's same-named label, if an overlay is set and contains the
+  label) with a 5% margin, then `set_ylim` on both trace axes. Wired
+  to `annotation_label` and `label_range` statevariable changes via a
+  new `StateVariable.add_on_change(callback)` callback list, so both
+  keyboard (digit keys, `'` / `;`, `q` / `w`,
+  `select_label_with_mouse`) and Qt-dropdown driven label switches
+  refit; `VideoPointAnnotator._on_active_label_change` de-dupes via
+  `_last_active_label` so the increment_label_range double-fire
+  (`cycle()` then `set_state()`) is a single fit. Layer flips
+  (primary or overlay) intentionally do NOT trigger a refit -- the
+  layer-flip comparison workflow keeps its current y window. The `r`
+  trace branch now calls the helper directly (was
+  `reset_axes(axis="y", ...)`), so pressing `r` over a trace gives a
+  comfortable view of the active label rather than compressing it into
+  the union of every label's data extent; `alt+r` retains the union
+  autoscale (sibling, explicitly documented). Single-label sessions
+  see no behavior change -- the helper walks exactly one label.
+  Binding descriptions tightened: `r` -> `"Reset view under cursor
+  (traces: full-video x, active label y)"`, `alt+r` -> `"Reset view
+  under cursor (traces: data-extent x, all-labels y)"`. Regression
+  tests in `tests/test_pointtracking.py`:
+  `test_fit_y_to_active_label_active_only`,
+  `test_fit_y_to_active_label_with_overlay`,
+  `test_fit_y_to_active_label_empty_is_noop`,
+  `test_label_switch_triggers_yfit`,
+  `test_layer_switch_does_not_trigger_yfit`,
+  `test_label_range_switch_triggers_yfit`,
+  `test_r_keybinding_trace_branch_fits_active_label_only`,
+  `test_alt_r_keybinding_trace_branch_keeps_union`.
 
 ### Removed
 - `_qt.make_sidebar_text_sink` / `_qt._QtSidebarTextSink` (fast_render
