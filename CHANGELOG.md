@@ -12,6 +12,19 @@ labeling UI end-to-end. All portfolio consumers of
 `dnav.VideoAnnotation` / `VideoPointAnnotator` / `lucas_kanade*` flip
 to `dustrack.*` in lockstep; no transitional re-exports.
 
+### Changed
+- **`VideoReader` now exposes `fname` and `name` attributes**
+  (`datanavigator/video_reader.py`). Previously only the `utils.Video`
+  subclass carried these (its `__init__` set them by hand); lifting
+  them to the base lets callers that previously required a
+  `utils.Video` instance — notably `dustrack.VideoAnnotation`, which
+  reads `self.video.fname` / `self.video.name` — accept a plain open
+  `VideoReader`. Backs the dustrack 1.2.0a2 cold-open win
+  (`dustrack._DUSTrackBase.add_annotation_layers` shares the
+  browser's single open reader across every annotation layer instead
+  of opening the file once per layer — see the dustrack changelog for
+  the av.open numbers).
+
 The relocation **preserves full git history** on both sides. On the
 dustrack side, `git log --follow dustrack/pointtracking.py` traces
 every dnav-era commit (rc1-rc2 perf work, label-aware y-refit,

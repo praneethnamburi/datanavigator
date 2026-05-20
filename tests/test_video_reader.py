@@ -122,6 +122,30 @@ def test_video_subclass_constructs(synthetic_clip):
     assert v.name == "testsrc"
 
 
+def test_videoreader_exposes_fname_and_name(synthetic_clip):
+    """1.5.0a2: base VideoReader carries ``fname`` + ``name`` so callers
+    that previously required the ``utils.Video`` subclass (notably
+    ``dustrack.VideoAnnotation``) can be handed a plain reader. Lets
+    DUSTrack share a single open reader across every annotation layer
+    of a session instead of opening the file once per layer.
+    """
+    from datanavigator import VideoReader
+
+    vr = VideoReader(str(synthetic_clip))
+    assert vr.fname == str(synthetic_clip)
+    assert vr.name == "testsrc"
+
+
+def test_videoreader_filehandle_fname_resolves_to_path(synthetic_clip):
+    """File-handle inputs still produce a string path on ``fname``."""
+    from datanavigator import VideoReader
+
+    with open(str(synthetic_clip), "rb") as f:
+        vr = VideoReader(f)
+        assert vr.fname == str(synthetic_clip)
+        assert vr.name == "testsrc"
+
+
 def test_video_gray_uses_rgb_to_gray(synthetic_clip):
     """Regression gate for the 1.3.0 RGB/BGR fix.
 

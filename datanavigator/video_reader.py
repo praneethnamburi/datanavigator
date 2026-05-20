@@ -500,6 +500,15 @@ class VideoReader:
             self._uri = str(uri.name)
         else:
             self._uri = str(uri)
+        # 1.5.0a2: surface ``fname`` + ``name`` on the base class so call
+        # sites that previously required the ``utils.Video`` subclass
+        # (notably ``dustrack.VideoAnnotation``, which reads
+        # ``self.video.fname`` / ``.name``) can be handed a plain
+        # ``VideoReader``. Lets DUSTrack share a single open reader
+        # across every annotation layer of a session instead of opening
+        # the file once per layer.
+        self.fname = self._uri
+        self.name = Path(self._uri).stem
         loaded = _open_with_cache(self._uri)
         self._reader = loaded.reader
         self._frame_pts: np.ndarray | None = loaded.frame_pts
