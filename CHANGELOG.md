@@ -1,22 +1,43 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
-## [1.4.0rc2] - 2026-05-18
+## [1.4.0] - 2026-05-19
 
-Release candidate for 1.4.0. Three themes layered on top of 1.4.0rc1:
-(a) the button host swaps from `QToolBar` to a `QDockWidget` +
+Major release shipping in two arcs from 1.3.1.
+
+**Arc 1: Qt-native rendering and event plumbing** (pre-released as
+1.4.0rc1, 2026-05-18). The video frame routes through `QGraphicsView`
++ `QPixmapItem` (`fast_render=True`; default off, DUSTrack 1.1.0
+defaults on) and the annotation scatter through
+`QGraphicsItemGroup`, leaving matplotlib responsible only for the
+trace canvas. Wheel-zoom + middle-button pan/reset on the image pane;
+`r` resets both image zoom and trace axes. Qt-native buttons
+(`QPushButton` in a `QToolBar`) and statevariables overlay (`QLabel`)
+replace matplotlib widgets; `qtpy` shim makes the Qt binding
+pluggable. Per-frame trace-recompute cache (`_revision` counter on
+`VideoAnnotation`) gates the trace recomputation. Result: 3.94×
+real-DUSTrack speedup (36 ms median, 27.8 fps) over 1.3.x. Full rc1
+notes:
+<https://github.com/praneethnamburi/datanavigator/releases/tag/v1.4.0rc1>.
+
+**Arc 2: Sidebar consolidation + data-layer cache invariant** (this
+release).
+(a) The button host swaps from `QToolBar` to a `QDockWidget` +
 `QVBoxLayout` left column, (b) state-variables are promoted from a
 read-only text overlay to interactive Qt controls (dropdowns / toggles
 / labels) mounted in that same column beneath the buttons, and (c) a
-focused robustness subset folded from the originally-planned rc3 band
-(see 2026-05-19 release-arc decision in the spec): inner per-label
-annotation dicts become a `dict` subclass that bumps `_revision` on
-every mutator, making the 1.4.0rc1-era cache-invariant discipline a
-data-structure invariant. (a) + (b) share a single goal -- one column
-of controls for an interactive UI, no scattered widgets across the
-QMainWindow's dock areas. (c) closes the bug class that bit
-`check_labels_with_lk` and DUSTrack's
+focused robustness subset folded from the originally-planned rc3 band:
+inner per-label annotation dicts become a `dict` subclass that bumps
+`_revision` on every mutator, making the rc1-era cache invariant a
+data-structure invariant rather than reviewer-side discipline. (a) +
+(b) share a single goal -- one column of controls for an interactive
+UI, no scattered widgets across the QMainWindow's dock areas. (c)
+closes the bug class that bit `check_labels_with_lk` and DUSTrack's
 `copy_existing_annotations_from_overlay` in rc1 at the data layer.
+
+The Added / Changed / Removed / Fixed sections below describe the
+Arc 2 work; refer to the v1.4.0rc1 GitHub release for the granular
+Arc 1 changelog.
 
 ### Added
 - `_TrackedFrameDict` -- internal `dict` subclass that wraps every
@@ -208,6 +229,33 @@ QMainWindow's dock areas. (c) closes the bug class that bit
   state-variable are responsible for resyncing via
   `_refresh_annotation_state_lists` after a reorder. Drives the
   DUSTrack 1.1.0rc2 layer-regrouping pass.
+- `VideoPointAnnotator.refresh()` + `VideoAnnotation.invalidate_caches()`
+  + `F5` keybinding (and inherited "Refresh UI" button) -- escape
+  hatch for the rare case of command-line direct mutations of `.data`
+  that bypass the public `add()` / `remove()` / `add_at_frame()` API
+  and therefore skip the `_revision` bump the trace-display and
+  frame-marker caches key on. `invalidate_caches()` nulls
+  `_trace_display_cache_key`; `refresh()` calls it on every annotation
+  layer, nulls `_frame_marker_cache`, then `update()`s. The
+  `_TrackedFrameDict` guard above makes a direct
+  `ann.data[label][frame] = ...` correctly bump revision, but
+  `refresh()` remains the insurance for any future bump miss in code
+  paths not yet thought through.
+- **Grouped Qt keybindings cheatsheet.** `show_key_bindings` now opens
+  a modeless `QDialog` with sections (Annotation / Frame navigation /
+  Layer / label / LK / interpolate / View / File / Other) instead of
+  the pre-rc2 matplotlib `TextView` popup. `add_key_binding` gains
+  `group=` and `on_button=` kwargs; `on_button=True` appends
+  `"  (key)"` to the matching button's label via identity-matched
+  lookup against `Buttons._action_funcs`, so buttons advertise their
+  own shortcut. `pointtracking.set_key_bindings` declares groups for
+  every binding mapping to the 5-step DUSTrack workflow (Select
+  annotation layer → Select annotation number → Navigate to frame →
+  Edit annotation → LK augmentation / refine).
+  `GenericBrowser.set_default_keybindings` follows suit. Stdout
+  fallback when no Qt window is available. Coverage:
+  `tests/test_key_bindings.py` (new module),
+  `tests/qt_learning/21_dustrack_keybindings_smoke.py`.
 
 ### Changed
 - `_qt._get_buttons_widget` replaces the pre-rc2 `_get_buttons_toolbar`.
@@ -399,6 +447,26 @@ QMainWindow's dock areas. (c) closes the bug class that bit
   script-mode run would silently import the env's installed
   datanavigator (which on older envs lacks `TextView._overlay`),
   producing an `AttributeError` unrelated to the test's intent.
+- **`fast_render` window resize re-fits the image.**
+  `_QtImagePane.resizeEvent` pre-rc2 gated the auto-re-fit on
+  `transform().isIdentity()`, but the *initial* `_fit_view()` leaves
+  a non-identity scale transform, so the check was False on every
+  subsequent resize and the image never re-fit. New
+  `_PanZoomGraphicsView.user_adjusted` flag is set True on wheel-zoom
+  and on real pan drags (cleared by `reset_view()`); `resizeEvent`
+  now re-fits when the flag is False, preserving the original intent
+  ("don't clobber a manual zoom") without the false negative on
+  auto-fit. Initial QMainWindow aspect ratio also tuned:
+  `make_image_pane` resizes the host window after `setCentralWidget`
+  so total height = `canvas_h * 3`, matching the layout's 2:1 stretch
+  hint and giving the image pane ~2x the canvas height (~600 px for
+  DUSTrack). Regression test:
+  `test_tier2_resize_refits_until_user_adjusts`.
+- **`z` selector listens on both trace axes.** The interval-picker
+  `Selector` had `ax_list=[self._ax_trace_x]`, so pressing `z` while
+  hovering the y-trace was a no-op. Now
+  `[self._ax_trace_x, self._ax_trace_y]` -- both trace panes accept
+  interval bracketing for LK-RSTC.
 - `GenericBrowser.copy_to_clipboard` (Ctrl+C) now grabs the entire
   `QMainWindow` via `QWidget.grab()` instead of `figure.savefig`-ing
   the matplotlib canvas alone. On a Qt backend the clipboard image
