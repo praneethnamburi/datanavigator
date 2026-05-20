@@ -1,6 +1,94 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
+## [1.5.0a1] - unreleased
+
+Structural refactor: `pointtracking.py` (VideoPointAnnotator,
+VideoAnnotation, VideoAnnotations) and `opticalflow.py` (lucas_kanade,
+lucas_kanade_rstc) relocated to the `dustrack` package. `datanavigator`
+narrows to **data-navigation primitives** -- browsers, asset managers,
+events; `dustrack 1.2.0a1` owns its DeepLabCut workflow + the VPA
+labeling UI end-to-end. All portfolio consumers of
+`dnav.VideoAnnotation` / `VideoPointAnnotator` / `lucas_kanade*` flip
+to `dustrack.*` in lockstep; no transitional re-exports.
+
+The relocation **preserves full git history** on both sides. On the
+dustrack side, `git log --follow dustrack/pointtracking.py` traces
+every dnav-era commit (rc1-rc2 perf work, label-aware y-refit,
+`_TrackedFrameDict` mutation guard, etc.). On the dnav side, the
+deletion shows up as a single coherent commit -- the files' history
+is reachable through their new home in dustrack.
+
+### Removed
+- `datanavigator.pointtracking` (relocated to `dustrack.pointtracking`):
+  `VideoPointAnnotator`, `VideoAnnotation`, `VideoAnnotations`,
+  `_TrackedFrameDict`. Cross-package: VPA remains a subclass of
+  `datanavigator.VideoBrowser`; asset managers, events, utils, `_qt`
+  scaffolding stay in dnav.
+- `datanavigator.opticalflow` (relocated to `dustrack.opticalflow`):
+  `lucas_kanade`, `lucas_kanade_rstc`. The frame-list siblings
+  `lucas_kanade_2` / `lucas_kanade_rstc_2` continue to live in
+  `dustrack.postprocess`.
+
+### Changed
+- README + `__init__.py` module docstring restated: datanavigator is
+  data-navigation primitives. The "Point tracking" + "Optical flow"
+  sections of the module docstring are gone; `__all__` drops the
+  relocated names. A new "See also" section in README points at
+  DUSTrack as the canonical downstream consumer.
+- `tests/test_fast_render_parity.py` narrowed to Tier-2 (Qt-pane +
+  pick-adapter) tests only. The Tier-1 VideoAnnotation positional
+  parity test relocated to `dustrack/tests/test_fast_render_parity.py`;
+  both files preserve full pre-split history via `git log --follow`.
+
+### Migration
+
+Direct `import datanavigator as dnav` users of `VideoAnnotation` /
+`VideoPointAnnotator` / `lucas_kanade*` need:
+
+```python
+import dustrack
+# was: dnav.VideoAnnotation(json_path, video_path).to_signals()
+ann = dustrack.VideoAnnotation(json_path, video_path)
+signals = ann.to_signals()
+
+# was: dnav.VideoPointAnnotator(video, ["pn", "buffer"])
+# now use DUSTrack instead -- direct VPA instantiation is being
+# phased out:
+v = dustrack.DUSTrack(video, ["pn", "buffer"])
+
+# was: dnav.lucas_kanade(video, start, end, init_points)
+from dustrack import lucas_kanade
+```
+
+The `datanavigator` floor in `dustrack`'s `pyproject.toml` moves to
+`>=1.5.0a1` so the two releases ship in lockstep.
+
+### Pickle compatibility
+
+A scan of `C:\data\_cache\` (352 files, 2026-05-19) returned zero hits
+for `datanavigator.pointtracking` or `datanavigator.opticalflow` in
+pickle headers, so no proactive `sys.modules` shim ships in this
+release. If you hit `ModuleNotFoundError: No module named
+'datanavigator.pointtracking'` when loading an older pickle (e.g. an
+archive on a different drive that wasn't part of the cache scan),
+register the import alias yourself before loading:
+
+```python
+import sys
+import dustrack.pointtracking
+import dustrack.opticalflow
+sys.modules["datanavigator.pointtracking"] = dustrack.pointtracking
+sys.modules["datanavigator.opticalflow"] = dustrack.opticalflow
+
+import pickle
+with open(path, "rb") as f:
+    obj = pickle.load(f)
+```
+
+If this surfaces for multiple users, a follow-up 1.5.0a2 will fold the
+alias into `datanavigator/__init__.py` directly.
+
 ## [1.4.0] - 2026-05-19
 
 Major release shipping in two arcs from 1.3.1.

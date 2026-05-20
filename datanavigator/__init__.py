@@ -1,6 +1,16 @@
 r"""
 Interactive data visualization for signals, videos, and complex data objects.
 
+datanavigator provides the modality-agnostic data-navigation primitives
+-- browsers, asset managers, events. The point-tracking UI
+(:class:`VideoPointAnnotator`), annotation containers
+(:class:`VideoAnnotation`, :class:`VideoAnnotations`), and Lucas-Kanade
+helpers (``lucas_kanade``, ``lucas_kanade_rstc``) used to live here too;
+in 1.5.0a1 they were relocated to the :mod:`dustrack` package alongside
+its DeepLabCut workflow. See ``dustrack.VideoPointAnnotator`` /
+``dustrack.VideoAnnotation`` for the new home. ``git log --follow
+dustrack/pointtracking.py`` traces the full pre-relocation history.
+
 Browsers
 
 - :py:class:`GenericBrowser`: Generic class to browse data. Meant to be extended.
@@ -10,19 +20,10 @@ Browsers
 - :py:class:`VideoPlotBrowser`: Browse through video and 1D signals synced to the video side by side.
 - :py:class:`ComponentBrowser`: Browse signals (e.g., from periodic motion) as scatterplots of components (e.g., from UMAP, PCA).
 
+Video I/O
 
-Point tracking
-
-- :py:class:`Video`: Extended VideoReader class with additional functionalities (helper for VideoPointAnnotator).
-- :py:class:`VideoAnnotation`: Manage one point annotation layer in a video.
-- :py:class:`VideoAnnotations`: Manager for multiple video annotation layers.
-- :py:class:`VideoPointAnnotator`: Annotate points in a video.
-
-Optical flow
-
-- :py:func:`lucas_kanade`: Track points in a video using the Lucas-Kanade algorithm.
-- :py:func:`lucas_kanade_rstc`: Track points in a video using Lucas-Kanade with reverse sigmoid tracking correction.
-- :py:func:`test_lucas_kanade_rstc`: Test function for Lucas-Kanade with reverse sigmoid tracking correction.
+- :py:class:`Video`: Extended VideoReader class with additional functionalities.
+- :py:class:`VideoReader`: PyAV-backed video reader with a TOC cache.
 
 Assets
 
@@ -92,9 +93,6 @@ from .signals import SignalBrowser
 from .videos import VideoBrowser, VideoPlotBrowser
 from .components import ComponentBrowser
 
-from .opticalflow import lucas_kanade, lucas_kanade_rstc
-from .pointtracking import VideoAnnotation, VideoAnnotations, VideoPointAnnotator
-
 from .utils import (
     TextView,
     Video,
@@ -159,17 +157,11 @@ __all__ = [
     "VideoBrowser",
     "VideoPlotBrowser",
     "ComponentBrowser",
-    # Point tracking
+    # Video I/O
     "Video",
     "VideoReader",
     "cpu",
     "precompute_toc",
-    "VideoAnnotation",
-    "VideoAnnotations",
-    "VideoPointAnnotator",
-    # Optical flow
-    "lucas_kanade",
-    "lucas_kanade_rstc",
     # Asset widgets
     "Button",
     "StateButton",

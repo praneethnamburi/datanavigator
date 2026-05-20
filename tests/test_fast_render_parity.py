@@ -1,20 +1,15 @@
 """
-Tier-2 (fast_render) parity + pick-event regression tests.
+Tier-2 (fast_render) Qt image-pane parity + pick-event regression tests.
 
-The two load-bearing claims about Tier 2 are:
+Exercises :class:`datanavigator._qt._QtScatterArtist` /
+:class:`datanavigator._qt._QtPickAdapter` directly -- pure Qt artists,
+no VideoAnnotation involved. The Tier-1 VideoAnnotation positional
+parity test relocated to DUSTrack alongside the annotation containers
+in datanavigator 1.5.0a1 / dustrack 1.2.0a1; see
+``dustrack/tests/test_fast_render_parity.py``. `git log --follow
+tests/test_fast_render_parity.py` traces the full pre-split history.
 
-1.  **Sub-pixel positional parity** -- a marker placed at a known data
-    coordinate must render at the same coordinate in Tier 2 as it does
-    in Tier 1. Annotators rely on this: the whole point of a point
-    tracker is "the dot is where you said it was."
-2.  **Pick-event equivalence** -- a mouse press at the display pixel
-    of a known marker must select the same label whether the pick
-    comes from matplotlib's ``pick_event`` (Tier 1) or from
-    :class:`datanavigator._qt._QtPickAdapter` (Tier 2).
-
-Tier 1 verification runs on Agg (matches conftest.py); Tier 2
-verification needs a Qt canvas. The Qt-side asserts are skipped if no
-Qt binding can be imported (CI without PyQt5/PySide6).
+Skipped if no Qt binding can be imported (CI without PyQt5/PySide6).
 """
 
 import os
@@ -25,8 +20,6 @@ import pytest
 # Force offscreen Qt early so importing qtpy never opens a window.
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from tests.test_pointtracking import video_fname  # noqa: F401 (fixture)
-
 
 def _qt_available():
     try:
@@ -35,42 +28,6 @@ def _qt_available():
         return True
     except Exception:
         return False
-
-
-# ---------------------------------------------------------------------------
-# Tier 1 -- already exercised by tests/test_pointtracking.py. We only
-# need a tiny direct positional check here so the parity comparison
-# below has a known-good reference number to assert against.
-# ---------------------------------------------------------------------------
-
-
-def test_tier1_scatter_offsets_match_data_coords(video_fname, tmp_path):  # noqa: F811
-    """A VideoAnnotation scatter records the same (x, y) it was given."""
-    import matplotlib
-    matplotlib.use("Agg", force=True)
-    import matplotlib.pyplot as plt
-
-    import datanavigator
-    from datanavigator.pointtracking import VideoAnnotation
-
-    fig, ax = plt.subplots()
-    ann = VideoAnnotation(vname=video_fname, name="parity", n_labels=2)
-    # add two labels with known positions
-    coords = [(10.5, 20.5), (100.0, 200.0)]
-    for label, (x, y) in enumerate(coords):
-        ann.add(location=[x, y], label=str(label), frame_number=0)
-
-    ann.plot_handles["ax_list_scatter"] = [ax]
-    ann.setup_display_scatter([ax])
-    ann.update_display_scatter(frame_number=0)
-
-    handle = ann.plot_handles["labels_in_ax0"]
-    offsets = np.asarray(handle.get_offsets())
-    # Per-label palette length may exceed coords; only the first two
-    # entries are meaningful here.
-    np.testing.assert_allclose(offsets[0], coords[0], atol=1e-6)
-    np.testing.assert_allclose(offsets[1], coords[1], atol=1e-6)
-    plt.close(fig)
 
 
 # ---------------------------------------------------------------------------

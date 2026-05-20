@@ -49,6 +49,18 @@ import datanavigator as dnav
 signal_browser = dnav.EventPickerDemo()
 ```
 
+## See also
+
+- [DUSTrack](https://github.com/praneethnamburi/DUSTrack) -- video point
+  tracking + annotation UI, built on top of `datanavigator`'s
+  `VideoBrowser`. Owns `VideoPointAnnotator` / `VideoAnnotation` (the
+  annotation containers used to live in `datanavigator.pointtracking`
+  through 1.4.0; they relocated to `dustrack` in 1.5.0a1 so
+  `datanavigator` stays modality-agnostic and `dustrack` owns its
+  DeepLabCut workflow end-to-end). `git log --follow dustrack/pointtracking.py`
+  on the dustrack side traces the full pre-relocation history.
+
+
 ## License
 
 This project is licensed under the MIT License. See the `LICENSE` file for details.
