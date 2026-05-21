@@ -24,6 +24,27 @@ to `dustrack.*` in lockstep; no transitional re-exports.
   browser's single open reader across every annotation layer instead
   of opening the file once per layer — see the dustrack changelog for
   the av.open numbers).
+- **`VideoReader(..., pix_fmt=None)` auto-detects monochrome sources**
+  and decodes them directly as `(H, W)` gray ndarrays. `pix_fmt=None`
+  (default) probes the source's encoded pixel format: `gray` /
+  `yuvj400p` / etc. → gray decode path; anything else → the historical
+  `rgb24` path. Pass `pix_fmt='gray'` to force gray decode on a color
+  source (extracts Y via swscale, skipping chroma noise); pass
+  `pix_fmt='rgb24'` to force the historical contract on a monochrome
+  source. The vendored `PyAVReaderIndexed` gained the same kwarg.
+  Threaded the parameter through `_open_with_cache` /
+  `_build_and_cache_all` so the TOC sidecar still amortises across
+  pix_fmt choices. On a 706x558 h265 monochrome clip, sequential
+  decode goes from 2.28 ms/frame (`rgb24 + cvtColor(RGB2GRAY)` —
+  current path) to 0.37 ms/frame (`to_ndarray('gray')` — new path),
+  a **~6.16x speedup**; on dustrack's full `decode + gray()` loop
+  including the postprocess short-circuit, end-to-end was **164 fps
+  → 1886 fps** (11.5x) on the S-corpus
+  `pia02_s001_011_RFA2_min1_15s_mono.mp4` test clip. Bench:
+  `S:/_corpus/dustrack/mono_encode_bench_2026-05-21/`. Six new tests
+  in `tests/test_video_reader.py` cover auto-detect on both source
+  shapes, explicit overrides in both directions, and the invalid-
+  value guard.
 
 The relocation **preserves full git history** on both sides. On the
 dustrack side, `git log --follow dustrack/pointtracking.py` traces

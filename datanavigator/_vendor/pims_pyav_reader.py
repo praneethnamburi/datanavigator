@@ -153,12 +153,24 @@ class PyAVReaderIndexed(FramesSequence):
         return {'mov', 'avi',
                 'mp4'} | super(PyAVReaderIndexed, cls).class_exts()
 
-    def __init__(self, file, toc=None, format=None):
+    def __init__(self, file, toc=None, format=None, pix_fmt='rgb24'):
+        # Set _container early so __del__ doesn't blow up if any later
+        # validation raises before _load_fresh_file() runs.
+        self._container = None
         if not hasattr(file, 'read'):
             file = str(file)
         self.file = file
         self.format = format
-        self._container = None
+        # Deviation: pix_fmt selects PyAV's swscale target for
+        # frame.to_ndarray(). 'rgb24' (upstream behaviour) returns
+        # (H, W, 3) uint8; 'gray' returns (H, W) uint8 by extracting the
+        # Y plane directly (skips YUV->RGB color matrix). Caller passes
+        # 'gray' when the source is monochrome-encoded (pix_fmt=gray,
+        # yuvj400p) to unlock the ~6x sequential-decode speedup vs the
+        # rgb24 path; see dustrack mono_encode_bench 2026-05-21.
+        if pix_fmt not in ('rgb24', 'gray'):
+            raise ValueError(f"pix_fmt must be 'rgb24' or 'gray', got {pix_fmt!r}")
+        self._pix_fmt = pix_fmt
 
         with av.open(self.file, format=self.format) as container:
             stream = [s for s in container.streams if s.type == 'video'][0]
@@ -183,9 +195,13 @@ class PyAVReaderIndexed(FramesSequence):
             self._toc_cumsum = np.cumsum(self.toc['lengths'])
             self._len = self._toc_cumsum[-1]
 
-            # PyAV always returns frames in color, and we make that
-            # assumption in get_frame() later below, so 3 is hardcoded here:
-            self._im_sz = stream.height, stream.width, 3
+            # Frame shape depends on the requested PyAV output format:
+            # rgb24 -> (H, W, 3), gray -> (H, W). Upstream hardcoded the
+            # color shape; the deviation tracks ``self._pix_fmt``.
+            if self._pix_fmt == 'gray':
+                self._im_sz = stream.height, stream.width
+            else:
+                self._im_sz = stream.height, stream.width, 3
             self._time_base = stream.time_base
 
         self._load_fresh_file()
@@ -234,7 +250,7 @@ class PyAVReaderIndexed(FramesSequence):
             loc = j - self._toc_cumsum[packet_no - 1]
         frame = self._current_packet[loc]  # av.VideoFrame
 
-        return Frame(frame.to_ndarray(format='rgb24'), frame_no=j)
+        return Frame(frame.to_ndarray(format=self._pix_fmt), frame_no=j)
 
     def _seek_packet(self, packet_no):
         """Advance through the container generator until we get the packet

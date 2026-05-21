@@ -173,6 +173,81 @@ def test_video_gray_uses_rgb_to_gray(synthetic_clip):
     assert np.array_equal(gray, expected)
 
 
+# ---------- pix_fmt='gray' opt-in + auto-detect ----------
+
+@pytest.fixture(scope="module")
+def mono_clip(tmp_path_factory) -> Path:
+    """Tiny h265 monochrome (pix_fmt=gray) clip for the gray-decode path."""
+    out = tmp_path_factory.mktemp("video_reader_mono") / "testsrc_mono.mp4"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i", f"testsrc=duration={DURATION_S}:size=64x48:rate={FPS}",
+            "-c:v", "libx265", "-pix_fmt", "gray", "-x265-params", "log-level=none",
+            str(out),
+        ],
+        check=True,
+    )
+    return out
+
+
+def test_pix_fmt_default_yuv420p_source_is_rgb24(synthetic_clip):
+    """Auto-detect on a color source (yuv420p) selects rgb24 -- the
+    historical behaviour; existing call sites must not regress."""
+    from datanavigator import VideoReader
+
+    vr = VideoReader(str(synthetic_clip))
+    assert vr.pix_fmt == "rgb24"
+    arr = vr[0].asnumpy()
+    assert arr.shape == (48, 64, 3)
+
+
+def test_pix_fmt_default_mono_source_is_gray(mono_clip):
+    """Auto-detect on a monochrome source (pix_fmt=gray) selects the
+    gray decode path: vr[i].asnumpy() returns (H, W) directly."""
+    from datanavigator import VideoReader
+
+    vr = VideoReader(str(mono_clip))
+    assert vr.pix_fmt == "gray"
+    arr = vr[0].asnumpy()
+    assert arr.shape == (48, 64)
+    assert arr.dtype == np.uint8
+
+
+def test_pix_fmt_explicit_gray_on_color_source(synthetic_clip):
+    """Explicit ``pix_fmt='gray'`` forces gray decode on a yuv420p
+    source. PyAV's swscale extracts Y (skipping chroma); shape is (H, W)."""
+    from datanavigator import VideoReader
+
+    vr = VideoReader(str(synthetic_clip), pix_fmt="gray")
+    assert vr.pix_fmt == "gray"
+    arr = vr[0].asnumpy()
+    assert arr.shape == (48, 64)
+
+
+def test_pix_fmt_explicit_rgb24_on_mono_source(mono_clip):
+    """Explicit ``pix_fmt='rgb24'`` forces rgb24 on a mono source.
+    swscale replicates Y across R/G/B; downstream code expecting (H, W, 3)
+    keeps working."""
+    from datanavigator import VideoReader
+
+    vr = VideoReader(str(mono_clip), pix_fmt="rgb24")
+    assert vr.pix_fmt == "rgb24"
+    arr = vr[0].asnumpy()
+    assert arr.shape == (48, 64, 3)
+    # On mono source decoded as rgb24, R == G == B per pixel.
+    assert np.array_equal(arr[..., 0], arr[..., 1])
+    assert np.array_equal(arr[..., 1], arr[..., 2])
+
+
+def test_pix_fmt_invalid_raises(synthetic_clip):
+    """Anything other than 'rgb24' or 'gray' is a ValueError."""
+    from datanavigator import VideoReader
+
+    with pytest.raises(ValueError, match="pix_fmt must be"):
+        VideoReader(str(synthetic_clip), pix_fmt="bgr24")
+
+
 # ---------- TOC sidecar cache ----------
 
 @pytest.fixture

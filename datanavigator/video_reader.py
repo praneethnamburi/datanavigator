@@ -294,12 +294,43 @@ class _CacheLoadResult:
         self.time_base_den = time_base_den
 
 
-def _build_and_cache_all(video_path: str, *, announce: bool) -> _CacheLoadResult:
+# Source pix_fmts that are monochrome. When ``VideoReader(pix_fmt=None)``
+# detects one of these in the source, it auto-selects the gray decode
+# path. Listed exhaustively rather than via substring match because PyAV
+# also exposes packed-luma formats whose names contain "y" but encode
+# multi-channel data (e.g. ``yuyv422``).
+_MONOCHROME_SOURCE_PIX_FMTS = frozenset({
+    "gray", "gray8", "gray9", "gray9le", "gray9be",
+    "gray10", "gray10le", "gray10be",
+    "gray12", "gray12le", "gray12be",
+    "gray14", "gray14le", "gray14be",
+    "gray16", "gray16le", "gray16be",
+    "grayf32", "grayf32le", "grayf32be",
+    "yuvj400p", "yuv400p",
+})
+
+
+def _detect_source_pix_fmt(path: str) -> str:
+    """Probe the source's encoded pix_fmt via PyAV stream metadata.
+
+    Returns the format name string. The auto-detect logic in
+    :class:`VideoReader` maps anything in :data:`_MONOCHROME_SOURCE_PIX_FMTS`
+    to the gray decode path.
+    """
+    import av
+
+    with av.open(path) as container:
+        stream = container.streams.video[0]
+        fmt = stream.codec_context.pix_fmt
+    return fmt or ""
+
+
+def _build_and_cache_all(video_path: str, *, announce: bool, pix_fmt: str) -> _CacheLoadResult:
     """Build TOC + per-frame timestamps in one pass, save v2 sidecar."""
     if announce:
         print(f"datanavigator: building TOC for {Path(video_path).name}...")
     toc, timestamps, time_base = _build_toc_and_timestamps(video_path)
-    reader = PyAVReaderIndexed(video_path, toc=toc)
+    reader = PyAVReaderIndexed(video_path, toc=toc, pix_fmt=pix_fmt)
     try:
         key = _cache_key(video_path)
         _save_sidecar(video_path, toc, key, timestamps=timestamps, time_base=time_base)
@@ -318,21 +349,21 @@ def _build_and_cache_all(video_path: str, *, announce: bool) -> _CacheLoadResult
     )
 
 
-def _open_with_cache(video_path: str) -> _CacheLoadResult:
+def _open_with_cache(video_path: str, *, pix_fmt: str) -> _CacheLoadResult:
     """Open ``video_path``, using the sidecar cache when available."""
     if not Path(video_path).is_file():
         # Network paths, file-likes resolved to non-file URIs, etc.: skip the
         # cache and let PyAVReaderIndexed handle whatever was passed in.
-        return _CacheLoadResult(PyAVReaderIndexed(video_path), None, None, None, None)
+        return _CacheLoadResult(PyAVReaderIndexed(video_path, pix_fmt=pix_fmt), None, None, None, None)
     try:
         key = _cache_key(video_path)
     except OSError:
-        return _CacheLoadResult(PyAVReaderIndexed(video_path), None, None, None, None)
+        return _CacheLoadResult(PyAVReaderIndexed(video_path, pix_fmt=pix_fmt), None, None, None, None)
 
     payload = _load_sidecar(video_path, key)
     if payload is not None:
         toc = payload["toc"]
-        reader = PyAVReaderIndexed(video_path, toc=toc)
+        reader = PyAVReaderIndexed(video_path, toc=toc, pix_fmt=pix_fmt)
         if payload["schema_version"] >= 2:
             ts = payload["timestamps"]
             tb = payload["time_base"]
@@ -347,7 +378,7 @@ def _open_with_cache(video_path: str) -> _CacheLoadResult:
         # lazy-upgraded) on first get_frame_timestamp() call.
         return _CacheLoadResult(reader, None, None, None, None)
 
-    return _build_and_cache_all(video_path, announce=True)
+    return _build_and_cache_all(video_path, announce=True, pix_fmt=pix_fmt)
 
 
 def precompute_toc(
@@ -489,6 +520,7 @@ class VideoReader:
         height: int = -1,
         num_threads: int = 0,
         fault_tol: int = -1,
+        pix_fmt: str | None = None,
     ) -> None:
         # decord accepted both string paths and file-like objects; preserve
         # that for downstream call sites (e.g. videos.VideoBrowser opens
@@ -509,7 +541,20 @@ class VideoReader:
         # the file once per layer.
         self.fname = self._uri
         self.name = Path(self._uri).stem
-        loaded = _open_with_cache(self._uri)
+        # Resolve pix_fmt. None (default) auto-detects from the source's
+        # encoded pixel format: monochrome sources (h265 mono, yuvj400p,
+        # etc.) go through PyAV's gray decode path which skips the
+        # YUV->RGB color matrix entirely (~6x faster on h265 mono per
+        # 2026-05-21 bench). Color sources keep the historical rgb24
+        # default. Pass an explicit string to override.
+        if pix_fmt is None:
+            try:
+                source_fmt = _detect_source_pix_fmt(self._uri)
+            except Exception:  # noqa: BLE001 -- probe is advisory; fall back to rgb24
+                source_fmt = ""
+            pix_fmt = "gray" if source_fmt in _MONOCHROME_SOURCE_PIX_FMTS else "rgb24"
+        self.pix_fmt = pix_fmt
+        loaded = _open_with_cache(self._uri, pix_fmt=pix_fmt)
         self._reader = loaded.reader
         self._frame_pts: np.ndarray | None = loaded.frame_pts
         self._frame_durations: np.ndarray | None = loaded.frame_durations
