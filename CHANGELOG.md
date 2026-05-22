@@ -12,6 +12,18 @@ labeling UI end-to-end. All portfolio consumers of
 `dnav.VideoAnnotation` / `VideoPointAnnotator` / `lucas_kanade*` flip
 to `dustrack.*` in lockstep; no transitional re-exports.
 
+### Added (2026-05-21)
+- **`_QtImagePane.get_view_state()` / `set_view_state(state)`**
+  (`datanavigator/_qt.py`). Opaque-blob round-trip of the
+  QGraphicsView transform + scrollbar positions, for callers that
+  want to snapshot + restore the image pane's zoom/pan across a
+  context switch. ``get_view_state()`` returns ``None`` when no
+  image has been set yet (no scene rect = nothing to snapshot);
+  ``set_view_state(None)`` falls back to ``reset_view()``. Backs
+  dustrack 1.2.0a3's per-bundle image-pane viewport persistence
+  across multi-video swaps; opt-in for any caller that needs the
+  same.
+
 ### Changed
 - **`VideoReader` now exposes `fname` and `name` attributes**
   (`datanavigator/video_reader.py`). Previously only the `utils.Video`

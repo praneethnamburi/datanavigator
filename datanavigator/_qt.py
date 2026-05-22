@@ -895,7 +895,7 @@ def _make_qt_image_pane_class():
     so no transform inversion is needed.
     """
     from qtpy.QtCore import QRectF, Qt
-    from qtpy.QtGui import QBrush, QColor, QPainter
+    from qtpy.QtGui import QBrush, QColor, QPainter, QTransform
     from qtpy.QtWidgets import (
         QFrame,
         QGraphicsItemGroup,
@@ -1076,6 +1076,53 @@ def _make_qt_image_pane_class():
             self._view.resetTransform()
             self._view.user_adjusted = False
             self._fit_view()
+
+        def get_view_state(self) -> Optional[dict]:
+            """Snapshot the current transform + scrollbar positions.
+
+            Returned dict round-trips through :meth:`set_view_state`.
+            Returns ``None`` when no image has been set yet (no scene
+            rect = nothing to snapshot) -- callers treat that as "no
+            saved viewport, defer to fit-to-frame on restore".
+
+            Used by DUSTrack 1.2.0a3's multi-video swap to remember
+            each bundle's image-pane viewport across swap-out /
+            swap-in cycles so a returning swap lands the user back on
+            exactly the zoom region they left.
+            """
+            if not self._scene_rect_set:
+                return None
+            t = self._view.transform()
+            return {
+                "transform": (
+                    float(t.m11()), float(t.m12()),
+                    float(t.m21()), float(t.m22()),
+                    float(t.dx()), float(t.dy()),
+                ),
+                "h_scroll": int(self._view.horizontalScrollBar().value()),
+                "v_scroll": int(self._view.verticalScrollBar().value()),
+                "user_adjusted": bool(self._view.user_adjusted),
+            }
+
+        def set_view_state(self, state: Optional[dict]) -> None:
+            """Restore a previously-snapshotted view state.
+
+            ``None`` (or a state captured before any image was set)
+            falls back to :meth:`reset_view`. Otherwise applies the
+            saved transform + scrollbar positions verbatim, and
+            restores the ``user_adjusted`` flag so subsequent
+            :meth:`resizeEvent` calls respect the user's prior zoom
+            intent (without this, the next window resize would
+            silently clobber the restored viewport).
+            """
+            if state is None or not self._scene_rect_set:
+                self.reset_view()
+                return
+            m11, m12, m21, m22, dx, dy = state["transform"]
+            self._view.setTransform(QTransform(m11, m12, m21, m22, dx, dy))
+            self._view.horizontalScrollBar().setValue(int(state["h_scroll"]))
+            self._view.verticalScrollBar().setValue(int(state["v_scroll"]))
+            self._view.user_adjusted = bool(state.get("user_adjusted", False))
 
         def resizeEvent(self, event):  # noqa: N802 (Qt naming)
             super().resizeEvent(event)
