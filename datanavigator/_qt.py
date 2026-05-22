@@ -1034,6 +1034,15 @@ def _make_qt_image_pane_class():
             self._bg_color = QColor(0, 0, 0)
             self._view.setBackgroundBrush(QBrush(self._bg_color))
             self._scene_rect_set = False
+            # Track the (w, h) the scene rect was last sized to; a
+            # follow-up :meth:`set_image` whose array doesn't match
+            # rebuilds the scene rect + refits. Without this, swapping
+            # to a video of different dimensions (DUSTrack 1.2.0a3
+            # seed-modal swap, future cross-camera projects) leaves
+            # the new image rendered in the old scene rect -- the
+            # symptom is "the loaded video looks zoomed in and reset
+            # doesn't help" because reset_view fits to the stale rect.
+            self._scene_rect_dims = None  # type: tuple[int, int] | None
 
             # Pick adapter is opt-in via :meth:`install_pick_adapter`.
             self._pick_adapter = None
@@ -1060,6 +1069,18 @@ def _make_qt_image_pane_class():
                 self._scene.setSceneRect(QRectF(0, 0, w, h))
                 self._fit_view()
                 self._scene_rect_set = True
+                self._scene_rect_dims = (w, h)
+            elif self._scene_rect_dims != (w, h):
+                # Dimensions changed across a swap. The prior transform
+                # is geometrically tied to the old scene rect, so any
+                # restored view state is now invalid -- rebuild the
+                # scene rect + reset transform + refit. user_adjusted
+                # is cleared so resizeEvent picks the refit path again.
+                self._scene.setSceneRect(QRectF(0, 0, w, h))
+                self._view.resetTransform()
+                self._view.user_adjusted = False
+                self._fit_view()
+                self._scene_rect_dims = (w, h)
 
         def _fit_view(self) -> None:
             self._view.fitInView(self._scene.sceneRect(), Qt.KeepAspectRatio)

@@ -12,6 +12,20 @@ labeling UI end-to-end. All portfolio consumers of
 `dnav.VideoAnnotation` / `VideoPointAnnotator` / `lucas_kanade*` flip
 to `dustrack.*` in lockstep; no transitional re-exports.
 
+### Fixed (2026-05-22)
+- **`_QtImagePane.set_image()` rebuilds the scene rect when image
+  dimensions change.** Previously the pane fixed its scene rect on
+  the first frame and never updated it; a follow-up `set_image` with
+  different dimensions (DUSTrack 1.2.0a3 seed-modal swap from the
+  64x64 synthetic seed video to the user's pick, or any future cross-
+  camera multi-video swap) left the new frame rendered in the old
+  scene rect -- the loaded video looked zoomed in and `r` reset
+  didn't help because `reset_view` re-fit to the stale rect. The new
+  code tracks the (w, h) the scene rect was last sized to; on a
+  mismatch it updates the scene rect, resets the view transform,
+  clears `user_adjusted`, and re-fits. Same-dimension calls (every
+  normal per-frame update) stay no-op-on-rect.
+
 ### Added (2026-05-21)
 - **`_QtImagePane.get_view_state()` / `set_view_state(state)`**
   (`datanavigator/_qt.py`). Opaque-blob round-trip of the
