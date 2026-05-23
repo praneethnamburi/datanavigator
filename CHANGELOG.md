@@ -1,7 +1,7 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
-## [1.5.0] - YYYY-MM-DD
+## [1.5.0] - 2026-05-23
 
 Structural refactor: `pointtracking.py` (VideoPointAnnotator,
 VideoAnnotation, VideoAnnotations) and `opticalflow.py` (lucas_kanade,
