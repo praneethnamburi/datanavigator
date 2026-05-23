@@ -1,6 +1,22 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- **`precompute_toc_folder(folder, *, extensions, recursive, force, show_progress)`**
+  — folder-walking sibling of `precompute_toc()`. Accepts a directory,
+  a file path, or an iterable mixing both; directories are walked
+  (recursive by default) for `extensions` (default
+  `DEFAULT_VIDEO_EXTENSIONS = (".mp4", ".mov", ".mkv", ".avi", ".m4v")`).
+  Returns the same `{path: status}` shape as `precompute_toc()`, plus an
+  `"error: missing"` entry for any explicitly-named path that doesn't
+  exist. Drives `dustrack.batch.build_toc()` /
+  `dustrack.batch.propagate_toc_to_dlc_project()` so portfolio callers
+  don't have to glob themselves. New public exports:
+  `precompute_toc_folder`, `DEFAULT_VIDEO_EXTENSIONS`. 10 new tests in
+  `tests/test_video_reader.py`.
+
 ## [1.5.0] - 2026-05-23
 
 Structural refactor: `pointtracking.py` (VideoPointAnnotator,

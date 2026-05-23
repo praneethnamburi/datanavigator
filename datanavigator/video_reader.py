@@ -406,6 +406,114 @@ def _open_with_cache(video_path: str, *, pix_fmt: str) -> _CacheLoadResult:
     return _build_and_cache_all(video_path, announce=True, pix_fmt=pix_fmt)
 
 
+DEFAULT_VIDEO_EXTENSIONS: tuple[str, ...] = (
+    ".mp4",
+    ".mov",
+    ".mkv",
+    ".avi",
+    ".m4v",
+)
+
+
+def _iter_video_files(
+    sources: Union[str, os.PathLike, Iterable[Union[str, os.PathLike]]],
+    *,
+    extensions: Iterable[str],
+    recursive: bool,
+) -> list[Path]:
+    """Resolve ``sources`` to a sorted, deduplicated list of video file paths.
+
+    Each item may be a file (kept as-is) or a directory (walked for
+    ``extensions``). Extension matching is case-insensitive. Order:
+    each input is processed in turn, and within each directory the walk
+    is sorted alphabetically; duplicates across inputs are dropped on
+    second occurrence.
+    """
+    norm_exts = {ext.lower() for ext in extensions}
+    if isinstance(sources, (str, os.PathLike)):
+        items: list[Path] = [Path(sources)]
+    else:
+        items = [Path(s) for s in sources]
+
+    out: list[Path] = []
+    seen: set[Path] = set()
+
+    def _add(fp: Path) -> None:
+        try:
+            key = fp.resolve()
+        except OSError:
+            key = fp
+        if key in seen:
+            return
+        seen.add(key)
+        out.append(fp)
+
+    for item in items:
+        if item.is_dir():
+            walker = item.rglob("*") if recursive else item.glob("*")
+            for fp in sorted(walker):
+                if fp.is_file() and fp.suffix.lower() in norm_exts:
+                    _add(fp)
+        elif item.is_file():
+            _add(item)
+        # Silently skip non-existent entries; precompute_toc_folder reports
+        # them as errors below if they were named explicitly.
+    return out
+
+
+def precompute_toc_folder(
+    folder: Union[str, os.PathLike, Iterable[Union[str, os.PathLike]]],
+    *,
+    extensions: Iterable[str] = DEFAULT_VIDEO_EXTENSIONS,
+    recursive: bool = True,
+    force: bool = False,
+    show_progress: bool = True,
+) -> dict:
+    """Walk a folder (or list of folders / files) and build TOCs for each video.
+
+    Thin sibling of :func:`precompute_toc` that handles directory walking
+    so callers don't have to glob themselves. Each ``folder`` entry may
+    be a directory (walked for ``extensions``) or a file (kept as-is).
+    Non-existent entries that were named explicitly are surfaced as
+    ``"error: missing"`` in the returned dict; directories that turn up
+    no matching videos are silently empty.
+
+    Example::
+
+        import datanavigator
+        results = datanavigator.precompute_toc_folder(
+            "M:/us_videos_for_tracking2",
+        )
+        # {'M:/.../foo.mp4': 'hit', 'M:/.../bar.mp4': 'built', ...}
+
+    Args:
+        folder: A directory path, a file path, or an iterable mixing both.
+        extensions: File extensions to include (case-insensitive). Default
+            covers the common video container formats.
+        recursive: If True (default), recurse into subdirectories.
+        force: Forwarded to :func:`precompute_toc` — rebuild even on hit.
+        show_progress: Forwarded to :func:`precompute_toc` — tqdm bar.
+
+    Returns:
+        ``{path: status}`` per :func:`precompute_toc`, with an extra
+        ``"error: missing"`` entry for any explicitly-named path that
+        doesn't exist.
+    """
+    # Capture explicit-but-missing entries so the caller can audit them.
+    if isinstance(folder, (str, os.PathLike)):
+        explicit = [Path(folder)]
+    else:
+        explicit = [Path(s) for s in folder]
+    missing = {str(p): "error: missing" for p in explicit if not p.exists()}
+
+    files = _iter_video_files(folder, extensions=extensions, recursive=recursive)
+    results = precompute_toc(files, force=force, show_progress=show_progress)
+    # Merge missing-entries dict, but don't overwrite real statuses on key collisions.
+    for path_str, status in missing.items():
+        results.setdefault(path_str, status)
+    return results
+
+
 def precompute_toc(
     paths: Iterable[Union[str, os.PathLike]],
     *,
@@ -420,6 +528,8 @@ def precompute_toc(
 
         import glob, datanavigator
         datanavigator.precompute_toc(glob.glob("data/*.mp4"))
+
+    For folder-walking semantics, see :func:`precompute_toc_folder`.
 
     Args:
         paths: Iterable of video file paths.

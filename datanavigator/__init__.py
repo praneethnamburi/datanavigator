@@ -103,7 +103,13 @@ from .utils import (
     is_video,
     ticks_from_times,
 )
-from .video_reader import VideoReader, cpu, precompute_toc
+from .video_reader import (
+    DEFAULT_VIDEO_EXTENSIONS,
+    VideoReader,
+    cpu,
+    precompute_toc,
+    precompute_toc_folder,
+)
 from .videos import VideoBrowser, VideoPlotBrowser
 
 
@@ -158,6 +164,8 @@ __all__ = [
     "VideoReader",
     "cpu",
     "precompute_toc",
+    "precompute_toc_folder",
+    "DEFAULT_VIDEO_EXTENSIONS",
     # Asset widgets
     "Button",
     "StateButton",

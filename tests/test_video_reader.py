@@ -490,3 +490,152 @@ def test_precompute_toc_batch_warmup(fresh_clip, tmp_path, capsys):
     VideoReader(str(fresh_clip))
     captured = capsys.readouterr()
     assert "building TOC" not in captured.out
+
+
+# ---------- precompute_toc_folder ----------
+
+
+def _make_clip(out_path: Path, *, duration: float = 1.0, size: str = "64x48") -> Path:
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i", f"testsrc=duration={duration}:size={size}:rate={FPS}",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "12",
+            str(out_path),
+        ],
+        check=True,
+    )
+    return out_path
+
+
+def test_precompute_toc_folder_recursive(tmp_path):
+    from datanavigator import precompute_toc_folder
+
+    root = tmp_path / "videos"
+    sub = root / "session_01"
+    sub.mkdir(parents=True)
+    a = _make_clip(root / "top.mp4")
+    b = _make_clip(sub / "nested.mp4", duration=0.5)
+
+    results = precompute_toc_folder(root, show_progress=False)
+
+    assert set(map(str, [a, b])).issubset(results)
+    assert results[str(a)] == "built"
+    assert results[str(b)] == "built"
+    assert Path(str(a) + ".dnav-toc").exists()
+    assert Path(str(b) + ".dnav-toc").exists()
+
+
+def test_precompute_toc_folder_non_recursive_skips_subdirs(tmp_path):
+    from datanavigator import precompute_toc_folder
+
+    root = tmp_path / "videos"
+    sub = root / "session_01"
+    sub.mkdir(parents=True)
+    a = _make_clip(root / "top.mp4")
+    b = _make_clip(sub / "nested.mp4", duration=0.5)
+
+    results = precompute_toc_folder(root, recursive=False, show_progress=False)
+
+    assert results[str(a)] == "built"
+    assert str(b) not in results
+
+
+def test_precompute_toc_folder_custom_extensions(tmp_path):
+    from datanavigator import precompute_toc_folder
+
+    root = tmp_path / "videos"
+    root.mkdir()
+    mp4 = _make_clip(root / "clip.mp4")
+    mov = _make_clip(root / "clip.mov")
+
+    # Only .mp4 — .mov is ignored.
+    results = precompute_toc_folder(
+        root,
+        extensions=(".mp4",),
+        show_progress=False,
+    )
+    assert results[str(mp4)] == "built"
+    assert str(mov) not in results
+
+
+def test_precompute_toc_folder_extension_match_is_case_insensitive(tmp_path):
+    from datanavigator import precompute_toc_folder
+
+    root = tmp_path / "videos"
+    root.mkdir()
+    upper = _make_clip(root / "clip.MP4")
+
+    results = precompute_toc_folder(root, show_progress=False)
+    assert results[str(upper)] == "built"
+
+
+def test_precompute_toc_folder_empty_folder_returns_empty(tmp_path):
+    from datanavigator import precompute_toc_folder
+
+    root = tmp_path / "empty"
+    root.mkdir()
+    results = precompute_toc_folder(root, show_progress=False)
+    assert results == {}
+
+
+def test_precompute_toc_folder_missing_path_reported(tmp_path):
+    from datanavigator import precompute_toc_folder
+
+    missing = tmp_path / "does_not_exist"
+    results = precompute_toc_folder(missing, show_progress=False)
+    assert results == {str(missing): "error: missing"}
+
+
+def test_precompute_toc_folder_mixed_iterable(tmp_path):
+    from datanavigator import precompute_toc_folder
+
+    folder = tmp_path / "videos"
+    folder.mkdir()
+    a = _make_clip(folder / "in_folder.mp4")
+    loose = _make_clip(tmp_path / "loose.mp4")
+
+    results = precompute_toc_folder([folder, loose], show_progress=False)
+
+    assert results[str(a)] == "built"
+    assert results[str(loose)] == "built"
+
+
+def test_precompute_toc_folder_dedup_when_folder_and_file_both_passed(tmp_path):
+    from datanavigator import precompute_toc_folder
+
+    folder = tmp_path / "videos"
+    folder.mkdir()
+    a = _make_clip(folder / "clip.mp4")
+
+    # Pass both the folder (which contains a) and a explicitly. Result
+    # should build a once and report exactly one entry for it.
+    results = precompute_toc_folder([folder, a], show_progress=False)
+    matching = [k for k in results if Path(k).resolve() == a.resolve()]
+    assert len(matching) == 1
+    assert results[matching[0]] == "built"
+
+
+def test_precompute_toc_folder_second_call_is_hit(tmp_path):
+    from datanavigator import precompute_toc_folder
+
+    root = tmp_path / "videos"
+    root.mkdir()
+    a = _make_clip(root / "clip.mp4")
+
+    first = precompute_toc_folder(root, show_progress=False)
+    assert first[str(a)] == "built"
+    second = precompute_toc_folder(root, show_progress=False)
+    assert second[str(a)] == "hit"
+
+
+def test_precompute_toc_folder_force_rebuild(tmp_path):
+    from datanavigator import precompute_toc_folder
+
+    root = tmp_path / "videos"
+    root.mkdir()
+    a = _make_clip(root / "clip.mp4")
+
+    precompute_toc_folder(root, show_progress=False)
+    rebuilt = precompute_toc_folder(root, force=True, show_progress=False)
+    assert rebuilt[str(a)] == "built"
