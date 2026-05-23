@@ -7,9 +7,10 @@ Classes:
 
 from __future__ import annotations
 
+from typing import Callable, Optional
+
 import pysampled
 from matplotlib import pyplot as plt
-from typing import Callable, Optional
 
 from .core import GenericBrowser
 
@@ -79,8 +80,6 @@ class SignalBrowser(GenericBrowser):
         else:
             self._plot.set_ydata(this_data)
         self._ax.set_title(self.titlefunc(self))
-        if (
-            "Auto limits" in self.buttons and self.buttons["Auto limits"].state
-        ):  # is True
+        if "Auto limits" in self.buttons and self.buttons["Auto limits"].state:  # is True
             self.reset_axes()
         plt.draw()

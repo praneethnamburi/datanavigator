@@ -9,7 +9,7 @@ Classes:
     StateVariable - Manage state variables with multiple states.
 
     AssetContainer - Container for managing assets such as buttons, memory slots, etc.
-    
+
     Buttons - Manager for buttons in a matplotlib figure or GUI.
     Selectors - Manager for selector objects for picking points on line2D objects.
     MemorySlots - Manager for memory slots to store and navigate positions.
@@ -18,13 +18,14 @@ Classes:
 
 from __future__ import annotations
 
+from typing import Any, Callable, List, Optional, Union
+
 import numpy as np
 from matplotlib import lines as mlines
 from matplotlib import pyplot as plt
 from matplotlib.path import Path as mPath
 from matplotlib.widgets import Button as ButtonWidget
 from matplotlib.widgets import LassoSelector as LassoSelectorWidget
-from typing import Any, Callable, List, Optional, Union
 
 from .utils import TextView
 
@@ -296,10 +297,13 @@ class Buttons(AssetContainer):
         b = None
         if pos is None:
             from ._qt import make_qt_button
+
             parent_fig = self.parent.figure
             start_state = kwargs.get("start_state", True if type_ == "Toggle" else None)
             b = make_qt_button(
-                parent_fig, text, type_=type_,
+                parent_fig,
+                text,
+                type_=type_,
                 start_state=bool(start_state) if start_state is not None else True,
             )
 
@@ -330,7 +334,9 @@ class Buttons(AssetContainer):
         return super().add(b)
 
     def register_style(
-        self, name: str, styler: Callable[[Any], None],
+        self,
+        name: str,
+        styler: Callable[[Any], None],
     ) -> None:
         """Register a per-button styler under ``name``.
 
@@ -357,6 +363,7 @@ class Buttons(AssetContainer):
         if tag in self._style_registry:
             return self._style_registry[tag]
         from .styles import BUILTIN_STYLES
+
         if tag in BUILTIN_STYLES:
             return BUILTIN_STYLES[tag]
         raise KeyError(
@@ -472,6 +479,7 @@ class Buttons(AssetContainer):
 
         # Qt path -- one row widget hosts N buttons.
         from ._qt import make_qt_button_row
+
         parent_fig = self.parent.figure
         row_buttons = make_qt_button_row(parent_fig, specs)
 
@@ -500,10 +508,18 @@ class Buttons(AssetContainer):
                 type_ = spec.get("type_", "Push")
                 assert type_ in ("Push", "Toggle")
                 spec_extra = {
-                    k: v for k, v in spec.items()
-                    if k not in (
-                        "text", "action_func", "pos", "w", "h", "buf",
-                        "type_", "style_tag",
+                    k: v
+                    for k, v in spec.items()
+                    if k
+                    not in (
+                        "text",
+                        "action_func",
+                        "pos",
+                        "w",
+                        "h",
+                        "buf",
+                        "type_",
+                        "style_tag",
                     )
                 }
                 x = btn_buf + i * (per_btn_w + x_gap)
@@ -520,7 +536,9 @@ class Buttons(AssetContainer):
         out = []
         for spec, b in zip(specs, row_buttons):
             self._finalize_button(
-                b, spec.get("action_func"), style_tag=spec.get("style_tag"),
+                b,
+                spec.get("action_func"),
+                style_tag=spec.get("style_tag"),
             )
             super().add(b)
             out.append(b)
@@ -528,7 +546,9 @@ class Buttons(AssetContainer):
         return out
 
     def add_separator(
-        self, name: Optional[str] = None, style: str = "single",
+        self,
+        name: Optional[str] = None,
+        style: str = "single",
     ) -> None:
         """Add a visual group boundary between buttons.
 
@@ -553,6 +573,7 @@ class Buttons(AssetContainer):
             style: ``"single"`` (default) or ``"double"``. See above.
         """
         from ._qt import add_qt_separator
+
         if add_qt_separator(self.parent.figure, style=style):
             return  # Qt path -- column layout owns the slot
 
@@ -667,9 +688,7 @@ class StateVariable:
     _ALLOWED_WIDGETS = ("label", "dropdown", "toggle")
 
     def __init__(self, name: str, states: list, widget: str = "label") -> None:
-        assert widget in self._ALLOWED_WIDGETS, (
-            f"widget={widget!r} not in {self._ALLOWED_WIDGETS}"
-        )
+        assert widget in self._ALLOWED_WIDGETS, f"widget={widget!r} not in {self._ALLOWED_WIDGETS}"
         self.name = name
         self.states = list(states)
         self._current_state_idx = 0
@@ -758,9 +777,7 @@ class StateVariables(AssetContainer):
 
     def _get_display_text(self) -> List[str]:
         """Get the display text for state variables."""
-        return ["State variables:"] + [
-            f"{x.name} - {x.current_state}" for x in self._list
-        ]
+        return ["State variables:"] + [f"{x.name} - {x.current_state}" for x in self._list]
 
     def show(self, pos: str = "bottom right", fax=None) -> None:
         """Show state variables.
@@ -774,6 +791,7 @@ class StateVariables(AssetContainer):
         Qt path they're ignored (the widget's position is dock-managed).
         """
         from ._qt import make_qt_statevars_widget
+
         widget = make_qt_statevars_widget(self.parent.figure, self)
         if widget is not None:
             self._text = widget

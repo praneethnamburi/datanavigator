@@ -16,13 +16,13 @@ from datetime import datetime, timedelta
 from typing import Callable, Dict, Optional, Union
 
 import pysampled
-from .video_reader import VideoReader
 from matplotlib import pyplot as plt
 from matplotlib.backend_bases import MouseButton
 from matplotlib.gridspec import GridSpec
 
 from . import _config
 from .core import GenericBrowser
+from .video_reader import VideoReader
 
 
 @functools.lru_cache(maxsize=1)
@@ -119,9 +119,7 @@ class VideoBrowser(GenericBrowser):
 
         if not os.path.exists(vid_name):
             # try looking in the CLIP FOLDER
-            vid_name = os.path.join(
-                _config.get_clip_folder(), os.path.split(vid_name)[-1]
-            )
+            vid_name = os.path.join(_config.get_clip_folder(), os.path.split(vid_name)[-1])
         assert os.path.exists(vid_name)
         self.fname = vid_name
         self.name = os.path.splitext(os.path.split(vid_name)[1])[0]
@@ -131,6 +129,7 @@ class VideoBrowser(GenericBrowser):
         self._image_pane = None
         if fast_render:
             from ._qt import make_image_pane
+
             self._image_pane = make_image_pane(self.figure)
             if self._image_pane is None:
                 # No Qt window -> degrade to Tier 1 rather than crash on a
@@ -175,9 +174,7 @@ class VideoBrowser(GenericBrowser):
         Args:
             n_steps (int): Number of steps to increment.
         """
-        self._current_idx = min(
-            self._current_idx + int(len(self) / n_steps), len(self) - 1
-        )
+        self._current_idx = min(self._current_idx + int(len(self) / n_steps), len(self) - 1)
         self.update()
 
     def decrement_frac(self, n_steps: int = 100) -> None:
@@ -191,9 +188,7 @@ class VideoBrowser(GenericBrowser):
 
     def update(self) -> None:
         """Update the video frame."""
-        processed = self.image_process_func(
-            self.data[self._current_idx].asnumpy()
-        )
+        processed = self.image_process_func(self.data[self._current_idx].asnumpy())
         if self._fast_render:
             self._image_pane.set_image(processed)
             self._image_pane.set_title(self.titlefunc(self))
@@ -323,13 +318,9 @@ class VideoPlotBrowser(GenericBrowser):
         plot_handles = {}
         for signal_count, (signal_name, this_signal) in enumerate(self.signals.items()):
             this_ax = fig.add_subplot(gs[signal_count, 1])
-            plot_handles[f"signal{signal_count}"] = this_ax.plot(
-                this_signal.t, this_signal()
-            )
+            plot_handles[f"signal{signal_count}"] = this_ax.plot(this_signal.t, this_signal())
             ylim = this_ax.get_ylim()
-            (plot_handles[f"signal{signal_count}_tick"],) = this_ax.plot(
-                [0, 0], ylim, "k"
-            )
+            (plot_handles[f"signal{signal_count}_tick"],) = this_ax.plot([0, 0], ylim, "k")
             this_ax.set_title(signal_name)
             if signal_count < len(self.signals) - 1:
                 this_ax.get_xaxis().set_ticks([])
@@ -350,9 +341,7 @@ class VideoPlotBrowser(GenericBrowser):
 
     def update(self) -> None:
         """Update the video frame and signals."""
-        self.plot_handles["montage"].set_data(
-            self.video_data[self._current_idx].asnumpy()
-        )
+        self.plot_handles["montage"].set_data(self.video_data[self._current_idx].asnumpy())
         self.plot_handles["ax"]["montage"].set_title(self.titlefunc(self))
         for signal_count, this_signal in enumerate(self.signals.items()):
             self.plot_handles[f"signal{signal_count}_tick"].set_xdata(

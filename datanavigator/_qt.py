@@ -80,8 +80,7 @@ def _make_qt_text_overlay_class():
             "}"
         )
 
-        def __init__(self, canvas, pos: Tuple[float, float, str, str],
-                     text_lines: List[str]):
+        def __init__(self, canvas, pos: Tuple[float, float, str, str], text_lines: List[str]):
             # Parent the QObject to the canvas so it's auto-cleaned up
             # when the canvas is destroyed.
             super().__init__(canvas)
@@ -152,8 +151,7 @@ def _make_qt_text_overlay_class():
     return QtTextOverlay
 
 
-def make_text_overlay(figure, pos: Tuple[float, float, str, str],
-                      text_lines: List[str]):
+def make_text_overlay(figure, pos: Tuple[float, float, str, str], text_lines: List[str]):
     """Build a Qt overlay over ``figure``'s canvas, or return None on non-Qt.
 
     Lazy import of qtpy: returns None (without raising) if Qt isn't
@@ -194,6 +192,7 @@ def _accepts_event_arg(func) -> bool:
     we call it with no args (``lambda: None`` shape, used in tests).
     """
     import inspect
+
     try:
         sig = inspect.signature(func)
     except (TypeError, ValueError):
@@ -201,9 +200,11 @@ def _accepts_event_arg(func) -> bool:
         # they accept an event (mpl-compatible default).
         return True
     for p in sig.parameters.values():
-        if p.kind in (inspect.Parameter.POSITIONAL_OR_KEYWORD,
-                      inspect.Parameter.POSITIONAL_ONLY,
-                      inspect.Parameter.VAR_POSITIONAL):
+        if p.kind in (
+            inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            inspect.Parameter.POSITIONAL_ONLY,
+            inspect.Parameter.VAR_POSITIONAL,
+        ):
             return True
     return False
 
@@ -336,8 +337,12 @@ def _get_left_column(qt_window):
         return col
     from qtpy.QtCore import Qt
     from qtpy.QtWidgets import (
-        QDockWidget, QSizePolicy, QVBoxLayout, QWidget,
+        QDockWidget,
+        QSizePolicy,
+        QVBoxLayout,
+        QWidget,
     )
+
     dock = QDockWidget("datanavigator", qt_window)
     dock.setTitleBarWidget(QWidget())
     dock.setFeatures(QDockWidget.NoDockWidgetFeatures)
@@ -364,13 +369,15 @@ def _get_left_column(qt_window):
     qt_window.addDockWidget(Qt.LeftDockWidgetArea, dock)
 
     col = _LeftColumn(
-        dock=dock, host=host, outer_layout=outer,
+        dock=dock,
+        host=host,
+        outer_layout=outer,
         buttons_widget=buttons_widget,
         statevars_slot_index=statevars_slot_index,
     )
     qt_window._dnav_left_column = col
     qt_window._dnav_buttons_widget = buttons_widget  # legacy alias
-    qt_window._dnav_buttons_dock = dock              # legacy alias
+    qt_window._dnav_buttons_dock = dock  # legacy alias
     return col
 
 
@@ -381,13 +388,17 @@ class _LeftColumn:
     instance survives across calls and its attribute names show up in
     debuggers / repr without depending on a closure.
     """
+
     __slots__ = (
-        "dock", "host", "outer_layout",
-        "buttons_widget", "statevars_widget", "statevars_slot_index",
+        "dock",
+        "host",
+        "outer_layout",
+        "buttons_widget",
+        "statevars_widget",
+        "statevars_slot_index",
     )
 
-    def __init__(self, *, dock, host, outer_layout,
-                 buttons_widget, statevars_slot_index):
+    def __init__(self, *, dock, host, outer_layout, buttons_widget, statevars_slot_index):
         self.dock = dock
         self.host = host
         self.outer_layout = outer_layout
@@ -423,6 +434,7 @@ def _make_qt_separator_widget(parent, style: str = "single"):
     no double-insertion bookkeeping.
     """
     from qtpy.QtWidgets import QFrame, QVBoxLayout, QWidget
+
     if style == "single":
         sep = QFrame(parent)
         sep.setFrameShape(QFrame.HLine)
@@ -439,9 +451,7 @@ def _make_qt_separator_widget(parent, style: str = "single"):
             line.setFrameShadow(QFrame.Sunken)
             lay.addWidget(line)
         return host
-    raise ValueError(
-        f"style={style!r} not in ('single', 'double')"
-    )
+    raise ValueError(f"style={style!r} not in ('single', 'double')")
 
 
 def add_qt_separator(figure, style: str = "single") -> bool:
@@ -493,8 +503,15 @@ def _make_qt_statevars_widget_class():
     never touches qtpy on a no-Qt-binding machine."""
     from qtpy.QtCore import Qt
     from qtpy.QtWidgets import (
-        QButtonGroup, QComboBox, QFrame, QHBoxLayout, QLabel,
-        QSizePolicy, QToolButton, QVBoxLayout, QWidget,
+        QButtonGroup,
+        QComboBox,
+        QFrame,
+        QHBoxLayout,
+        QLabel,
+        QSizePolicy,
+        QToolButton,
+        QVBoxLayout,
+        QWidget,
     )
 
     class _QtStatevarsWidget(QWidget):
@@ -865,6 +882,7 @@ def _ndarray_to_qpixmap(arr):
     synchronously, so a single-call site (set_image) is safe.
     """
     from qtpy.QtGui import QImage, QPixmap
+
     h, w, _ = arr.shape
     img = QImage(arr.data, w, h, w * 3, QImage.Format_RGB888)
     return QPixmap.fromImage(img)
@@ -873,6 +891,7 @@ def _ndarray_to_qpixmap(arr):
 def _as_rgb_uint8(arr):
     """Coerce a decoded frame ndarray into contiguous H x W x 3 uint8."""
     import numpy as np
+
     if arr.ndim == 2:
         arr = np.stack([arr, arr, arr], axis=-1)
     if arr.dtype != np.uint8:
@@ -1003,8 +1022,7 @@ def _make_qt_image_pane_class():
 
             self._title = QLabel("", self)
             self._title.setStyleSheet(
-                "QLabel { color: black; background-color: transparent;"
-                " padding: 2px 4px; }"
+                "QLabel { color: black; background-color: transparent;" " padding: 2px 4px; }"
             )
 
             self._scene = QGraphicsScene(self)
@@ -1116,9 +1134,12 @@ def _make_qt_image_pane_class():
             t = self._view.transform()
             return {
                 "transform": (
-                    float(t.m11()), float(t.m12()),
-                    float(t.m21()), float(t.m22()),
-                    float(t.dx()), float(t.dy()),
+                    float(t.m11()),
+                    float(t.m12()),
+                    float(t.m21()),
+                    float(t.m22()),
+                    float(t.dx()),
+                    float(t.dy()),
                 ),
                 "h_scroll": int(self._view.horizontalScrollBar().value()),
                 "v_scroll": int(self._view.verticalScrollBar().value()),
@@ -1211,8 +1232,7 @@ def _make_qt_image_pane_class():
     return _QtImagePane
 
 
-def make_image_pane(figure, picker_radius: float = 5.0,
-                    sidebar_width: int = 280):
+def make_image_pane(figure, picker_radius: float = 5.0, sidebar_width: int = 280):
     """Build and install a :class:`_QtImagePane` above ``figure``'s canvas.
 
     The QMainWindow's central widget is replaced with a two-row
@@ -1245,6 +1265,7 @@ def make_image_pane(figure, picker_radius: float = 5.0,
     except ImportError:
         return None
     from qtpy.QtWidgets import QVBoxLayout, QWidget
+
     canvas = figure.canvas
 
     container = QWidget(qt_window)
@@ -1286,6 +1307,7 @@ def make_image_pane(figure, picker_radius: float = 5.0,
 def _coerce_qcolor(color):
     """Best-effort QColor builder from mpl-shaped or string inputs."""
     from qtpy.QtGui import QColor
+
     if isinstance(color, QColor):
         return color
     if isinstance(color, str):
@@ -1294,6 +1316,7 @@ def _coerce_qcolor(color):
         # mpl rgb(a) tuples are floats in 0..1.
         def _u8(v):
             return max(0, min(255, int(round(float(v) * 255))))
+
         if len(color) == 3:
             return QColor(_u8(color[0]), _u8(color[1]), _u8(color[2]))
         return QColor(_u8(color[0]), _u8(color[1]), _u8(color[2]), _u8(color[3]))
@@ -1310,11 +1333,10 @@ def _make_qt_scatter_artist_class():
     ``set_sizes``, ``remove``. The handle is what gets stashed in
     ``plot_handles[f"labels_in_ax{ax_cnt}"]``.
     """
+    import numpy as np
     from qtpy.QtCore import QRectF
     from qtpy.QtGui import QBrush, QPen
     from qtpy.QtWidgets import QGraphicsEllipseItem
-
-    import numpy as np
 
     class _QtScatterArtist:
         """Qt-native scatter artist over a QGraphicsItemGroup."""
@@ -1325,8 +1347,7 @@ def _make_qt_scatter_artist_class():
         # at default zoom, 6 image pixels reads as a similar size.
         _DEFAULT_RADIUS_PX = 6.0
 
-        def __init__(self, group, palette, picker_radius: float = 5.0,
-                     image_pane=None):
+        def __init__(self, group, palette, picker_radius: float = 5.0, image_pane=None):
             self._group = group
             self._palette = list(palette)
             self._items = []  # parallel to palette; created lazily by set_offsets
@@ -1344,8 +1365,7 @@ def _make_qt_scatter_artist_class():
             while len(self._items) < n_pts:
                 idx = len(self._items)
                 item = QGraphicsEllipseItem(
-                    QRectF(-self._radius, -self._radius,
-                           2 * self._radius, 2 * self._radius)
+                    QRectF(-self._radius, -self._radius, 2 * self._radius, 2 * self._radius)
                 )
                 color = self._palette[idx % len(self._palette)]
                 qcolor = _coerce_qcolor(color)
@@ -1404,7 +1424,8 @@ def _make_qt_scatter_artist_class():
         def set_facecolor(self, colors) -> None:
             """Accepts a single color or one-per-point list (mpl shape)."""
             if isinstance(colors, str) or (
-                isinstance(colors, (tuple, list)) and len(colors) in (3, 4)
+                isinstance(colors, (tuple, list))
+                and len(colors) in (3, 4)
                 and not isinstance(colors[0], (tuple, list))
             ):
                 colors = [colors] * len(self._items)
@@ -1421,7 +1442,7 @@ def _make_qt_scatter_artist_class():
                 s = float(sizes[i % len(sizes)])
                 # Half-width of the bounding square approximates the
                 # markersize -> radius mapping mpl uses internally.
-                r = (s ** 0.5) / 2.0
+                r = (s**0.5) / 2.0
                 item.setRect(QRectF(-r, -r, 2 * r, 2 * r))
 
         def remove(self) -> None:
@@ -1445,7 +1466,7 @@ def _make_qt_scatter_artist_class():
             nearest distance.
             """
             best_i = None
-            best_d2 = self._picker_radius ** 2
+            best_d2 = self._picker_radius**2
             for i, (mx, my) in enumerate(self._offsets):
                 if np.isnan(mx) or np.isnan(my):
                     continue
@@ -1606,6 +1627,7 @@ def make_keybindings_dialog(figure, keypressdict, section_order=None):
     except ImportError:
         return None
     from .core import _group_keybindings
+
     sections = _group_keybindings(keypressdict, section_order)
     dialog = cls(qt_window, sections)
     dialog.show()
@@ -1685,12 +1707,8 @@ def _make_keybindings_dialog_class():
 
                 table.resizeColumnsToContents()
                 table.resizeRowsToContents()
-                table.horizontalHeader().setSectionResizeMode(
-                    0, QHeaderView.ResizeToContents
-                )
-                table.horizontalHeader().setSectionResizeMode(
-                    1, QHeaderView.Stretch
-                )
+                table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+                table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
                 # Fix the table height to its content; the QScrollArea
                 # outside handles overflow for the whole dialog.
                 row_h = table.verticalHeader().defaultSectionSize()

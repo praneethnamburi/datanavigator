@@ -17,10 +17,8 @@ behavior PyAVReaderIndexed relies on: ``__getitem__`` delegates to
 class itself is reproduced verbatim so future re-syncs against upstream
 are trivial diffs.
 """
-from __future__ import annotations
 
-import numpy as np
-from numpy import asarray, ndarray
+from __future__ import annotations
 
 # Deviation from upstream: the original PIMS file wraps this import in
 # ``try / except ImportError`` (av = None) because PIMS supports other
@@ -30,6 +28,8 @@ from numpy import asarray, ndarray
 # inside ``__init__``. Import unconditionally so a missing dep fails
 # loud at ``import datanavigator`` time instead.
 import av
+import numpy as np
+from numpy import asarray, ndarray
 
 
 def available():
@@ -111,7 +111,7 @@ class FramesSequence:
 
 def _next_video_packet(container_iter):
     for packet in container_iter:
-        if packet.stream.type == 'video':
+        if packet.stream.type == "video":
             decoded = packet.decode()
             if len(decoded) > 0:
                 return decoded
@@ -146,18 +146,18 @@ class PyAVReaderIndexed(FramesSequence):
     >>> frame_count = len(video) # Number of frames in video
     >>> frame_shape = video.frame_shape # Pixel dimensions of video
     """
+
     class_priority = 8
 
     @classmethod
     def class_exts(cls):
-        return {'mov', 'avi',
-                'mp4'} | super(PyAVReaderIndexed, cls).class_exts()
+        return {"mov", "avi", "mp4"} | super(PyAVReaderIndexed, cls).class_exts()
 
-    def __init__(self, file, toc=None, format=None, pix_fmt='rgb24'):
+    def __init__(self, file, toc=None, format=None, pix_fmt="rgb24"):
         # Set _container early so __del__ doesn't blow up if any later
         # validation raises before _load_fresh_file() runs.
         self._container = None
-        if not hasattr(file, 'read'):
+        if not hasattr(file, "read"):
             file = str(file)
         self.file = file
         self.format = format
@@ -168,37 +168,37 @@ class PyAVReaderIndexed(FramesSequence):
         # 'gray' when the source is monochrome-encoded (pix_fmt=gray,
         # yuvj400p) to unlock the ~6x sequential-decode speedup vs the
         # rgb24 path; see dustrack mono_encode_bench 2026-05-21.
-        if pix_fmt not in ('rgb24', 'gray'):
+        if pix_fmt not in ("rgb24", "gray"):
             raise ValueError(f"pix_fmt must be 'rgb24' or 'gray', got {pix_fmt!r}")
         self._pix_fmt = pix_fmt
 
         with av.open(self.file, format=self.format) as container:
-            stream = [s for s in container.streams if s.type == 'video'][0]
+            stream = [s for s in container.streams if s.type == "video"][0]
 
             # Build a toc
             if toc is None:
                 packet_lengths = []
                 packet_ts = []
                 for packet in container.demux(stream):
-                    if packet.stream.type == 'video':
+                    if packet.stream.type == "video":
                         decoded = packet.decode()
                         if len(decoded) > 0:
                             packet_lengths.append(len(decoded))
                             packet_ts.append(decoded[0].pts)
                 self._toc = {
-                    'lengths': packet_lengths,
-                    'ts': packet_ts,
+                    "lengths": packet_lengths,
+                    "ts": packet_ts,
                 }
             else:
                 self._toc = toc
 
-            self._toc_cumsum = np.cumsum(self.toc['lengths'])
+            self._toc_cumsum = np.cumsum(self.toc["lengths"])
             self._len = self._toc_cumsum[-1]
 
             # Frame shape depends on the requested PyAV output format:
             # rgb24 -> (H, W, 3), gray -> (H, W). Upstream hardcoded the
             # color shape; the deviation tracks ``self._pix_fmt``.
-            if self._pix_fmt == 'gray':
+            if self._pix_fmt == "gray":
                 self._im_sz = stream.height, stream.width
             else:
                 self._im_sz = stream.height, stream.width, 3
@@ -210,7 +210,7 @@ class PyAVReaderIndexed(FramesSequence):
         if self._container is not None:
             self._container.close()
 
-        if hasattr(self.file, 'seek'):
+        if hasattr(self.file, "seek"):
             self.file.seek(0)
 
         self._container = av.open(self.file, format=self.format)
@@ -222,7 +222,7 @@ class PyAVReaderIndexed(FramesSequence):
 
     @property
     def _video_stream(self):
-        return [s for s in self._container.streams if s.type == 'video'][0]
+        return [s for s in self._container.streams if s.type == "video"][0]
 
     def __len__(self):
         return self._len
@@ -241,7 +241,7 @@ class PyAVReaderIndexed(FramesSequence):
 
     def get_frame(self, j):
         # Find the packet this frame is in.
-        packet_no = self._toc_cumsum.searchsorted(j, side='right')
+        packet_no = self._toc_cumsum.searchsorted(j, side="right")
         self._seek_packet(packet_no)
         # Find the location of the frame within the packet.
         if packet_no == 0:
@@ -255,7 +255,7 @@ class PyAVReaderIndexed(FramesSequence):
     def _seek_packet(self, packet_no):
         """Advance through the container generator until we get the packet
         we want. Store that packet in selfpp._current_packet."""
-        packet_ts = self.toc['ts'][packet_no]
+        packet_ts = self.toc["ts"][packet_no]
         # Only seek when needed.
         if packet_no == self._current_packet_no:
             return
@@ -292,8 +292,9 @@ class PyAVReaderIndexed(FramesSequence):
 Source: {filename}
 Length: {count} frames
 Frame Shape: {frame_shape!r}
-""".format(frame_shape=self.frame_shape,
-           count=len(self),
-           filename=self.file)
+""".format(
+            frame_shape=self.frame_shape, count=len(self), filename=self.file
+        )
+
 
 # ---------- END verbatim from upstream pims/pyav_reader.py ----------

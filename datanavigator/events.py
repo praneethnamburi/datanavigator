@@ -235,9 +235,7 @@ class Event:
         self.data_func = data_func
 
     @classmethod
-    def _from_existing_file(
-        cls, fname: str, data_id_func: Callable | None = lambda: None
-    ) -> Event:
+    def _from_existing_file(cls, fname: str, data_id_func: Callable | None = lambda: None) -> Event:
         """Create an Event object by reading an existing JSON file."""
         h, _ = cls._read_json_file(fname)
         return cls(
@@ -421,11 +419,7 @@ class Event:
         def _get_lines() -> list:
             """Return non-empty lines in the axis where event was invoked, or else in all lines in the figure."""
             if event.inaxes is not None:
-                return [
-                    line
-                    for line in event.inaxes.get_lines()
-                    if len(line.get_xdata()) > 0
-                ]
+                return [line for line in event.inaxes.get_lines() if len(line.get_xdata()) > 0]
             return [
                 line
                 for ax in event.canvas.figure.axes
@@ -434,22 +428,10 @@ class Event:
             ]
 
         def _get_first_available_timestamp() -> float:
-            return min(
-                [
-                    np.nanmin(l.get_xdata())
-                    for l in _get_lines()
-                    if len(l.get_xdata()) > 0
-                ]
-            )
+            return min([np.nanmin(l.get_xdata()) for l in _get_lines() if len(l.get_xdata()) > 0])
 
         def _get_last_available_timestamp() -> float:
-            return max(
-                [
-                    np.nanmax(l.get_xdata())
-                    for l in _get_lines()
-                    if len(l.get_xdata()) > 0
-                ]
-            )
+            return max([np.nanmax(l.get_xdata()) for l in _get_lines() if len(l.get_xdata()) > 0])
 
         def clamp(n: float) -> float:
             smallest = _get_first_available_timestamp()
@@ -526,14 +508,10 @@ class Event:
 
             add_dist = np.abs(val_add - t_marked)
             def_dist = np.abs(val_def - t_marked)
-            if (add_dist <= def_dist) and (
-                self.win_remove[0] < add_dist < self.win_remove[1]
-            ):
+            if (add_dist <= def_dist) and (self.win_remove[0] < add_dist < self.win_remove[1]):
                 sequence = ev.added.pop(idx_add)
                 _deleted = True
-            if (def_dist < add_dist) and (
-                self.win_remove[0] < def_dist < self.win_remove[1]
-            ):
+            if (def_dist < add_dist) and (self.win_remove[0] < def_dist < self.win_remove[1]):
                 sequence = ev.default.pop(idx_def)
                 ev.removed.append(sequence)
                 _removed = True
@@ -600,10 +578,12 @@ class Event:
         """Get the y-axis limits."""
         if type == "data":
             try:
+
                 def nanlim(x: np.ndarray, default) -> tuple[float, float]:
                     if np.isnan(x).all():
                         return default
                     return np.nanmin(x), np.nanmax(x)
+
                 x = np.asarray(
                     [
                         nanlim(line.get_ydata(), line.axes.get_ylim())
@@ -642,20 +622,12 @@ class Event:
             x = np.asarray(
                 [
                     this_times + [np.nan]
-                    for this_times in self._data.get(
-                        self.data_id_func(), EventData()
-                    ).get_times()
+                    for this_times in self._data.get(self.data_id_func(), EventData()).get_times()
                 ]
             ).flatten()
-            y1 = np.asarray(
-                [[yl[0]] * 2 + [np.nan] for _ in range(int(len(x) / 3))]
-            ).flatten()
-            y2 = np.asarray(
-                [[yl[1]] * 2 + [np.nan] for _ in range(int(len(x) / 3))]
-            ).flatten()
-            this_collection = ax.fill_between(
-                x, y1, y2, color=self.color, **plot_kwargs
-            )
+            y1 = np.asarray([[yl[0]] * 2 + [np.nan] for _ in range(int(len(x) / 3))]).flatten()
+            y2 = np.asarray([[yl[1]] * 2 + [np.nan] for _ in range(int(len(x) / 3))]).flatten()
+            this_collection = ax.fill_between(x, y1, y2, color=self.color, **plot_kwargs)
             self.plot_handles.append(this_collection)
         if draw:
             plt.draw()
@@ -673,10 +645,7 @@ class Event:
     def to_portions(self) -> dict:
         """Convert the event data to portions."""
         assert self.size == 2
-        return {
-            signal_id: event_data.to_portions()
-            for signal_id, event_data in self._data.items()
-        }
+        return {signal_id: event_data.to_portions() for signal_id, event_data in self._data.items()}
 
 
 class Events(AssetContainer):

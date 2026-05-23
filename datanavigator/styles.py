@@ -38,8 +38,8 @@ def _is_dark_mode() -> bool:
     no-op on the mpl path anyway.
     """
     try:
-        from qtpy.QtWidgets import QApplication
         from qtpy.QtGui import QPalette
+        from qtpy.QtWidgets import QApplication
     except ImportError:
         return False
     app = QApplication.instance()
@@ -63,15 +63,25 @@ def _apply_primary(b: Any) -> None:
     if qbtn is None:
         return
     if _is_dark_mode():
-        qbtn.setStyleSheet(_qss(
-            bg="#3b6db5", fg="#ffffff", border="#2a4f80",
-            hover="#4a7fc8", pressed="#2a4f80",
-        ))
+        qbtn.setStyleSheet(
+            _qss(
+                bg="#3b6db5",
+                fg="#ffffff",
+                border="#2a4f80",
+                hover="#4a7fc8",
+                pressed="#2a4f80",
+            )
+        )
     else:
-        qbtn.setStyleSheet(_qss(
-            bg="#cfdef3", fg="#2c3e50", border="#a8c0dd",
-            hover="#bccfea", pressed="#a8c0dd",
-        ))
+        qbtn.setStyleSheet(
+            _qss(
+                bg="#cfdef3",
+                fg="#2c3e50",
+                border="#a8c0dd",
+                hover="#bccfea",
+                pressed="#a8c0dd",
+            )
+        )
 
 
 def _apply_secondary(b: Any) -> None:
@@ -79,15 +89,25 @@ def _apply_secondary(b: Any) -> None:
     if qbtn is None:
         return
     if _is_dark_mode():
-        qbtn.setStyleSheet(_qss(
-            bg="#3a3a3a", fg="#e0e0e0", border="#555555",
-            hover="#4a4a4a", pressed="#2e2e2e",
-        ))
+        qbtn.setStyleSheet(
+            _qss(
+                bg="#3a3a3a",
+                fg="#e0e0e0",
+                border="#555555",
+                hover="#4a4a4a",
+                pressed="#2e2e2e",
+            )
+        )
     else:
-        qbtn.setStyleSheet(_qss(
-            bg="#e0e4e8", fg="#2c3e50", border="#c0c5cb",
-            hover="#d0d4d9", pressed="#c0c5cb",
-        ))
+        qbtn.setStyleSheet(
+            _qss(
+                bg="#e0e4e8",
+                fg="#2c3e50",
+                border="#c0c5cb",
+                hover="#d0d4d9",
+                pressed="#c0c5cb",
+            )
+        )
 
 
 def _apply_neutral(b: Any) -> None:
@@ -104,15 +124,25 @@ def _apply_warn(b: Any) -> None:
     if qbtn is None:
         return
     if _is_dark_mode():
-        qbtn.setStyleSheet(_qss(
-            bg="#7a4a2e", fg="#fbe6c8", border="#5a3520",
-            hover="#8c5a3a", pressed="#5a3520",
-        ))
+        qbtn.setStyleSheet(
+            _qss(
+                bg="#7a4a2e",
+                fg="#fbe6c8",
+                border="#5a3520",
+                hover="#8c5a3a",
+                pressed="#5a3520",
+            )
+        )
     else:
-        qbtn.setStyleSheet(_qss(
-            bg="#f5d9c0", fg="#2c3e50", border="#d9b88a",
-            hover="#eaca9f", pressed="#d9b88a",
-        ))
+        qbtn.setStyleSheet(
+            _qss(
+                bg="#f5d9c0",
+                fg="#2c3e50",
+                border="#d9b88a",
+                hover="#eaca9f",
+                pressed="#d9b88a",
+            )
+        )
 
 
 BUILTIN_STYLES: Dict[str, Callable[[Any], None]] = {

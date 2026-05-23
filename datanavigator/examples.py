@@ -14,13 +14,13 @@ Classes:
 
 import os
 import urllib.request
-from typing import Optional, Any
+from typing import Any, Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pysampled
-from matplotlib.widgets import LassoSelector as LassoSelectorWidget
 from matplotlib.path import Path
+from matplotlib.widgets import LassoSelector as LassoSelectorWidget
 
 from . import _config
 from .core import Buttons
@@ -58,7 +58,9 @@ def get_example_video(dest_folder: str = None, source_url: str = None) -> str:
         return example_video_path
 
     if source_url is None:
-        source_url = "https://test-videos.co.uk/vids/jellyfish/mp4/h264/720/Jellyfish_720_10s_2MB.mp4"
+        source_url = (
+            "https://test-videos.co.uk/vids/jellyfish/mp4/h264/720/Jellyfish_720_10s_2MB.mp4"
+        )
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
@@ -105,9 +107,7 @@ class EventPickerDemo(SignalBrowser):
         properties and key bindings, and performs an initial plot update.
         """
         plot_data = [
-            pysampled.Data(
-                np.random.rand(100), sr=10, meta={"id": f"sig{sig_count:02d}"}
-            )
+            pysampled.Data(np.random.rand(100), sr=10, meta={"id": f"sig{sig_count:02d}"})
             for sig_count in range(10)
         ]
         super().__init__(plot_data)
@@ -183,9 +183,7 @@ class ButtonDemo(plt.Figure):
         super().__init__(*args, **kwargs)
         self.buttons = Buttons(parent=self)
         self.buttons.add(text="test", type_="Toggle")
-        self.buttons.add(
-            text="push button", type_="Push", action_func=self.test_callback
-        )
+        self.buttons.add(text="push button", type_="Push", action_func=self.test_callback)
         plt.show(block=False)
 
     def test_callback(self, event: Optional[Any] = None) -> None:

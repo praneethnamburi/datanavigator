@@ -23,6 +23,7 @@ v1 sidecars stay readable and lazy-upgrade on first call. Use
 :func:`precompute_toc` to batch-warm the cache before an annotation
 session.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -37,7 +38,6 @@ import numpy as np
 
 from ._vendor.pims_pyav_reader import PyAVReaderIndexed
 
-
 _SIDECAR_SUFFIX = ".dnav-toc"
 _SIDECAR_SCHEMA_VERSION = 2
 _SUPPORTED_SCHEMA_VERSIONS = (1, 2)
@@ -45,6 +45,7 @@ _SHA_PROBE_BYTES = 64 * 1024  # 64 KiB head + 64 KiB tail
 
 
 # ---------- TOC sidecar cache ----------
+
 
 def _sidecar_path(video_path: str) -> Path:
     """Return the sidecar path: ``<video>.dnav-toc`` (JSON content, no .json
@@ -135,14 +136,18 @@ def _serialize_payload(payload: dict) -> str:
             "frame_pts": "__DNAV_FRAME_PTS__",
             "frame_durations": "__DNAV_FRAME_DURATIONS__",
         }
-        replacements.append((
-            '"__DNAV_FRAME_PTS__"',
-            json.dumps([int(x) for x in payload["timestamps"]["frame_pts"]]),
-        ))
-        replacements.append((
-            '"__DNAV_FRAME_DURATIONS__"',
-            json.dumps([int(x) for x in payload["timestamps"]["frame_durations"]]),
-        ))
+        replacements.append(
+            (
+                '"__DNAV_FRAME_PTS__"',
+                json.dumps([int(x) for x in payload["timestamps"]["frame_pts"]]),
+            )
+        )
+        replacements.append(
+            (
+                '"__DNAV_FRAME_DURATIONS__"',
+                json.dumps([int(x) for x in payload["timestamps"]["frame_durations"]]),
+            )
+        )
     text = json.dumps(outer, indent=2, sort_keys=True)
     for placeholder, compact in replacements:
         text = text.replace(placeholder, compact)
@@ -235,10 +240,9 @@ def _build_toc_and_timestamps(video_path: str) -> tuple[dict, dict, dict]:
         time_base = stream.time_base
         # Fallback frame duration in time_base units, derived from average_rate.
         if stream.average_rate is not None and float(stream.average_rate) > 0:
-            avg_step = int(round(
-                time_base.denominator
-                / (float(stream.average_rate) * time_base.numerator)
-            ))
+            avg_step = int(
+                round(time_base.denominator / (float(stream.average_rate) * time_base.numerator))
+            )
         else:
             avg_step = 0
 
@@ -299,15 +303,32 @@ class _CacheLoadResult:
 # path. Listed exhaustively rather than via substring match because PyAV
 # also exposes packed-luma formats whose names contain "y" but encode
 # multi-channel data (e.g. ``yuyv422``).
-_MONOCHROME_SOURCE_PIX_FMTS = frozenset({
-    "gray", "gray8", "gray9", "gray9le", "gray9be",
-    "gray10", "gray10le", "gray10be",
-    "gray12", "gray12le", "gray12be",
-    "gray14", "gray14le", "gray14be",
-    "gray16", "gray16le", "gray16be",
-    "grayf32", "grayf32le", "grayf32be",
-    "yuvj400p", "yuv400p",
-})
+_MONOCHROME_SOURCE_PIX_FMTS = frozenset(
+    {
+        "gray",
+        "gray8",
+        "gray9",
+        "gray9le",
+        "gray9be",
+        "gray10",
+        "gray10le",
+        "gray10be",
+        "gray12",
+        "gray12le",
+        "gray12be",
+        "gray14",
+        "gray14le",
+        "gray14be",
+        "gray16",
+        "gray16le",
+        "gray16be",
+        "grayf32",
+        "grayf32le",
+        "grayf32be",
+        "yuvj400p",
+        "yuv400p",
+    }
+)
 
 
 def _detect_source_pix_fmt(path: str) -> str:
@@ -354,11 +375,15 @@ def _open_with_cache(video_path: str, *, pix_fmt: str) -> _CacheLoadResult:
     if not Path(video_path).is_file():
         # Network paths, file-likes resolved to non-file URIs, etc.: skip the
         # cache and let PyAVReaderIndexed handle whatever was passed in.
-        return _CacheLoadResult(PyAVReaderIndexed(video_path, pix_fmt=pix_fmt), None, None, None, None)
+        return _CacheLoadResult(
+            PyAVReaderIndexed(video_path, pix_fmt=pix_fmt), None, None, None, None
+        )
     try:
         key = _cache_key(video_path)
     except OSError:
-        return _CacheLoadResult(PyAVReaderIndexed(video_path, pix_fmt=pix_fmt), None, None, None, None)
+        return _CacheLoadResult(
+            PyAVReaderIndexed(video_path, pix_fmt=pix_fmt), None, None, None, None
+        )
 
     payload = _load_sidecar(video_path, key)
     if payload is not None:
@@ -432,7 +457,11 @@ def precompute_toc(
                 continue
             toc, timestamps, time_base = _build_toc_and_timestamps(path_str)
             ok = _save_sidecar(
-                path_str, toc, key, timestamps=timestamps, time_base=time_base,
+                path_str,
+                toc,
+                key,
+                timestamps=timestamps,
+                time_base=time_base,
             )
             results[path_str] = "built" if ok else "built (uncached)"
         except Exception as e:  # noqa: BLE001 — surface per-file errors as status
@@ -441,6 +470,7 @@ def precompute_toc(
 
 
 # ---------- Shim API ----------
+
 
 class _CpuCtx:
     """Sentinel returned by :func:`cpu`. Exists only for decord call-site parity."""
@@ -614,7 +644,11 @@ class VideoReader:
         if isinstance(indices, range):
             idxs = np.arange(indices.start, indices.stop, indices.step or 1, dtype=np.int64)
         else:
-            idxs = np.atleast_1d(np.asarray(list(indices) if hasattr(indices, "__iter__") else [indices], dtype=np.int64))
+            idxs = np.atleast_1d(
+                np.asarray(
+                    list(indices) if hasattr(indices, "__iter__") else [indices], dtype=np.int64
+                )
+            )
         starts_units = self._frame_pts[idxs]
         durations_units = self._frame_durations[idxs]
         time_base_seconds = self._time_base_num / self._time_base_den
@@ -627,8 +661,7 @@ class VideoReader:
         opens. Upgrades the on-disk sidecar to v2 if the directory is
         writable."""
         print(
-            f"datanavigator: indexing frame timestamps for "
-            f"{Path(self._uri).name}...",
+            f"datanavigator: indexing frame timestamps for " f"{Path(self._uri).name}...",
         )
         toc, timestamps, time_base = _build_toc_and_timestamps(self._uri)
         # Sanity-check the rebuilt TOC against the one we opened with —
@@ -648,8 +681,11 @@ class VideoReader:
         try:
             key = _cache_key(self._uri)
             _save_sidecar(
-                self._uri, toc, key,
-                timestamps=timestamps, time_base=time_base,
+                self._uri,
+                toc,
+                key,
+                timestamps=timestamps,
+                time_base=time_base,
             )
         except OSError:
             pass

@@ -1,13 +1,13 @@
 """
 This module provides functions to set and get the paths for the clip and cache folders.
 
-The clip folder is used to store video clips, for example, when using VideoBrowser. 
+The clip folder is used to store video clips, for example, when using VideoBrowser.
 The cache folder is used by the :py:mod:`datanavigator.examples` to write json file containing marked events.
 """
 
+import logging
 import os
 import sys
-import logging
 from pathlib import Path
 
 # Configure logging

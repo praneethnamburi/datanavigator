@@ -14,9 +14,10 @@ from typing import List, Tuple, Union
 
 import cv2 as cv
 import numpy as np
-from .video_reader import VideoReader, cpu
 from matplotlib import axes as maxes
 from matplotlib import pyplot as plt
+
+from .video_reader import VideoReader, cpu
 
 
 def ticks_from_times(
@@ -153,9 +154,7 @@ def _parse_fax(
     return f, ax
 
 
-def _parse_pos(
-    pos: Union[str, Tuple[float, float, str, str]]
-) -> Tuple[float, float, str, str]:
+def _parse_pos(pos: Union[str, Tuple[float, float, str, str]]) -> Tuple[float, float, str, str]:
     """Helper function to parse position strings.
 
     Args:
@@ -225,6 +224,7 @@ class TextView:
             self.figure = fax
 
         from ._qt import make_text_overlay
+
         self._overlay = make_text_overlay(self.figure, self._pos, self.text)
         if self._overlay is not None:
             # Qt path: the QLabel overlay does the rendering; we deliberately
@@ -283,15 +283,11 @@ class TextView:
         if self._text is not None:
             self._text.remove()
         x, y, va, ha = self._pos
-        self._text = self._ax.text(
-            x, y, "\n".join(self.text), va=va, ha=ha, family="monospace"
-        )
+        self._text = self._ax.text(x, y, "\n".join(self.text), va=va, ha=ha, family="monospace")
         plt.draw()
 
 
-def get_palette(
-    palette_name: str = "Set2", n_colors: int = 10
-) -> List[Tuple[float, float, float]]:
+def get_palette(palette_name: str = "Set2", n_colors: int = 10) -> List[Tuple[float, float, float]]:
     """Get a color palette, with fallback if seaborn is not available.
 
     Args:
@@ -318,7 +314,8 @@ def get_palette(
                 (0.70, 0.70, 0.70),
                 (0.40, 0.76, 0.65),
                 (0.99, 0.55, 0.38),
-            ]*int(np.ceil(n_colors/10))  # Repeat the palette to cover n_colors
+            ]
+            * int(np.ceil(n_colors / 10))  # Repeat the palette to cover n_colors
         }
         return palettes[palette_name][:n_colors]
 
@@ -326,7 +323,7 @@ def get_palette(
 def is_video(vid_file: str):
     if vid_file is None or not os.path.exists(vid_file):
         return False
-    
+
     cap = cv.VideoCapture(vid_file)
     if cap.isOpened():
         ret, _ = cap.read()
@@ -436,11 +433,7 @@ def is_pathname_valid(pathname: str) -> bool:
         # Directory guaranteed to exist. If the current OS is Windows, this is
         # the drive to which Windows was installed (e.g., the "%HOMEDRIVE%"
         # environment variable); else, the typical root directory.
-        root_dirname = (
-            os.environ.get("HOMEDRIVE", "C:")
-            if sys.platform == "win32"
-            else os.path.sep
-        )
+        root_dirname = os.environ.get("HOMEDRIVE", "C:") if sys.platform == "win32" else os.path.sep
         assert os.path.isdir(root_dirname)  # ...Murphy and her ironclad Law
 
         # Append a path separator to this directory if needed.

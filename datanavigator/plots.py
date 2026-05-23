@@ -118,9 +118,7 @@ class PlotBrowser(GenericBrowser):
             self.plot_func(self.get_current_data(), self.figure, **self.plot_kwargs)
         else:
             self.memoryslots.update_display()
-            self.plot_func(
-                self.get_current_data(), self.plot_handles, **self.plot_kwargs
-            )
+            self.plot_func(self.get_current_data(), self.plot_handles, **self.plot_kwargs)
         if self.buttons["Auto limits"].state:  # is True
             self.reset_axes()
         super().update(event)

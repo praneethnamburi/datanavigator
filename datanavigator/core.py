@@ -68,9 +68,7 @@ def _group_keybindings(
 
     other = buckets.pop(None, None)
     if section_order:
-        leading = [
-            (g, buckets.pop(g)) for g in section_order if g in buckets
-        ]
+        leading = [(g, buckets.pop(g)) for g in section_order if g in buckets]
         sections = leading + list(buckets.items())
     else:
         sections = list(buckets.items())
@@ -257,9 +255,7 @@ class GenericBrowser:
         """Restore any modified default keybindings in matplotlib."""
         for param_name, key in self._bindings_removed.items():
             if key not in mpl.rcParams[param_name]:
-                mpl.rcParams[param_name].append(
-                    key
-                )  # param names: keymap.back, keymap.forward)
+                mpl.rcParams[param_name].append(key)  # param names: keymap.back, keymap.forward)
             self._bindings_removed[param_name] = {}
 
     def __len__(self):
@@ -354,6 +350,7 @@ class GenericBrowser:
         ``_action_funcs`` list that :meth:`Buttons.add` populates.
         """
         from .assets import apply_shortcut_hint
+
         for btn in getattr(self.buttons, "_list", []):
             action_funcs = getattr(btn, "_action_funcs", ())
             if any(af is callback for af in action_funcs):
@@ -368,7 +365,9 @@ class GenericBrowser:
         """
         if key_name in self._keypressdict:
             del self._keypressdict[key_name]
-            reversed_bindings_dict = {key: mpl_param_name for mpl_param_name, key in self._bindings_removed.items()}
+            reversed_bindings_dict = {
+                key: mpl_param_name for mpl_param_name, key in self._bindings_removed.items()
+            }
             if key_name in reversed_bindings_dict:
                 # find the key value pair with the value equal to key_name
                 mpl.rcParams[reversed_bindings_dict[key_name]].append(key_name)
@@ -471,9 +470,7 @@ class GenericBrowser:
         Args:
             n_steps (int, optional): Number of steps to divide the total length into. Defaults to 20.
         """
-        self._current_idx = min(
-            self._current_idx + int(len(self) / n_steps), len(self) - 1
-        )
+        self._current_idx = min(self._current_idx + int(len(self) / n_steps), len(self) - 1)
         self.update()
 
     def decrement_frac(self, n_steps: int = 20):
@@ -535,9 +532,8 @@ class GenericBrowser:
         nice cheatsheet without the Qt path.
         """
         from ._qt import make_keybindings_dialog
-        dialog = make_keybindings_dialog(
-            self.figure, self._keypressdict, self._section_order
-        )
+
+        dialog = make_keybindings_dialog(self.figure, self._keypressdict, self._section_order)
         if dialog is not None:
             self._keybinding_dialog = dialog
             return
@@ -545,9 +541,7 @@ class GenericBrowser:
         print(_format_keybindings_text(self._keypressdict, self._section_order))
 
     @staticmethod
-    def _filter_sibling_axes(
-        ax: list[maxes.Axes], share: str = "x", get_bool: bool = False
-    ):
+    def _filter_sibling_axes(ax: list[maxes.Axes], share: str = "x", get_bool: bool = False):
         """
         Given a list of matplotlib axes, it will return axes to manipulate by picking one from a set of siblings.
 
