@@ -32,7 +32,7 @@ import os
 import sys
 import tempfile
 from pathlib import Path
-from typing import Iterable, Sequence, Union
+from typing import Callable, Iterable, Optional, Sequence, Union
 
 import numpy as np
 
@@ -468,6 +468,8 @@ def precompute_toc_folder(
     recursive: bool = True,
     force: bool = False,
     show_progress: bool = True,
+    progress_callback: Optional[Callable[[int, int, str, str], None]] = None,
+    cancel_check: Optional[Callable[[], bool]] = None,
 ) -> dict:
     """Walk a folder (or list of folders / files) and build TOCs for each video.
 
@@ -493,6 +495,8 @@ def precompute_toc_folder(
         recursive: If True (default), recurse into subdirectories.
         force: Forwarded to :func:`precompute_toc` — rebuild even on hit.
         show_progress: Forwarded to :func:`precompute_toc` — tqdm bar.
+        progress_callback: Forwarded to :func:`precompute_toc`.
+        cancel_check: Forwarded to :func:`precompute_toc`.
 
     Returns:
         ``{path: status}`` per :func:`precompute_toc`, with an extra
@@ -507,7 +511,13 @@ def precompute_toc_folder(
     missing = {str(p): "error: missing" for p in explicit if not p.exists()}
 
     files = _iter_video_files(folder, extensions=extensions, recursive=recursive)
-    results = precompute_toc(files, force=force, show_progress=show_progress)
+    results = precompute_toc(
+        files,
+        force=force,
+        show_progress=show_progress,
+        progress_callback=progress_callback,
+        cancel_check=cancel_check,
+    )
     # Merge missing-entries dict, but don't overwrite real statuses on key collisions.
     for path_str, status in missing.items():
         results.setdefault(path_str, status)
@@ -519,6 +529,8 @@ def precompute_toc(
     *,
     force: bool = False,
     show_progress: bool = True,
+    progress_callback: Optional[Callable[[int, int, str, str], None]] = None,
+    cancel_check: Optional[Callable[[], bool]] = None,
 ) -> dict:
     """Batch-build and cache TOCs + per-frame timestamps for a sequence of
     video files.
@@ -538,6 +550,20 @@ def precompute_toc(
             upgrade pre-1.3 sidecars to schema v2 with per-frame
             timestamps.)
         show_progress: If True (default), wrap iteration in a tqdm bar.
+            Suppressed when ``progress_callback`` is set, so UI callers
+            don't get both a bar and their own per-file updates.
+        progress_callback: Optional ``fn(idx, total, path, status)``
+            invoked after each video is resolved (hit / built / error).
+            ``idx`` is the zero-based position in the input list,
+            ``total`` is the full length, ``path`` is the string path
+            passed in, ``status`` is the same per-file string written
+            into the return dict. Lets UI consumers drive their own
+            progress widget without parsing tqdm output.
+        cancel_check: Optional zero-arg callable polled at the top of
+            each video. If it returns truthy, the loop exits early and
+            the partial ``{path: status}`` dict is returned (already-
+            processed entries kept). Used by UI consumers' Cancel
+            button.
 
     Returns:
         ``{path: status}`` where status is ``"hit"`` (cache already valid),
@@ -545,37 +571,50 @@ def precompute_toc(
         but sidecar save failed), or ``f"error: {msg}"`` (skipped).
     """
     paths_list = [str(p) for p in paths]
-    if show_progress:
+    # tqdm is suppressed when a UI callback is wired -- the caller is
+    # rendering its own progress and a stdout bar would compete.
+    bar = None
+    if show_progress and progress_callback is None:
         try:
             from tqdm import tqdm
 
-            iterator = tqdm(paths_list, desc="Building TOCs", unit="video")
+            bar = tqdm(total=len(paths_list), desc="Building TOCs", unit="video")
         except ImportError:
-            iterator = paths_list
-    else:
-        iterator = paths_list
+            bar = None
 
     results: dict[str, str] = {}
-    for path_str in iterator:
-        try:
-            if not Path(path_str).is_file():
-                results[path_str] = "error: not a file"
-                continue
-            key = _cache_key(path_str)
-            if not force and _load_sidecar(path_str, key) is not None:
-                results[path_str] = "hit"
-                continue
-            toc, timestamps, time_base = _build_toc_and_timestamps(path_str)
-            ok = _save_sidecar(
-                path_str,
-                toc,
-                key,
-                timestamps=timestamps,
-                time_base=time_base,
-            )
-            results[path_str] = "built" if ok else "built (uncached)"
-        except Exception as e:  # noqa: BLE001 — surface per-file errors as status
-            results[path_str] = f"error: {e}"
+    total = len(paths_list)
+    try:
+        for idx, path_str in enumerate(paths_list):
+            if cancel_check is not None and cancel_check():
+                break
+            try:
+                if not Path(path_str).is_file():
+                    status = "error: not a file"
+                else:
+                    key = _cache_key(path_str)
+                    if not force and _load_sidecar(path_str, key) is not None:
+                        status = "hit"
+                    else:
+                        toc, timestamps, time_base = _build_toc_and_timestamps(path_str)
+                        ok = _save_sidecar(
+                            path_str,
+                            toc,
+                            key,
+                            timestamps=timestamps,
+                            time_base=time_base,
+                        )
+                        status = "built" if ok else "built (uncached)"
+            except Exception as e:  # noqa: BLE001 — surface per-file errors as status
+                status = f"error: {e}"
+            results[path_str] = status
+            if progress_callback is not None:
+                progress_callback(idx, total, path_str, status)
+            if bar is not None:
+                bar.update(1)
+    finally:
+        if bar is not None:
+            bar.close()
     return results
 
 

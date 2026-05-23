@@ -11,10 +11,17 @@ All notable changes to this project will be documented in this file.
   `DEFAULT_VIDEO_EXTENSIONS = (".mp4", ".mov", ".mkv", ".avi", ".m4v")`).
   Returns the same `{path: status}` shape as `precompute_toc()`, plus an
   `"error: missing"` entry for any explicitly-named path that doesn't
-  exist. Drives `dustrack.batch.build_toc()` /
-  `dustrack.batch.propagate_toc_to_dlc_project()` so portfolio callers
-  don't have to glob themselves. New public exports:
-  `precompute_toc_folder`, `DEFAULT_VIDEO_EXTENSIONS`. 10 new tests in
+  exist. Drives `dustrack.batch.build_toc()` so portfolio callers don't
+  have to glob themselves. New public exports: `precompute_toc_folder`,
+  `DEFAULT_VIDEO_EXTENSIONS`. 10 new tests in
+  `tests/test_video_reader.py`.
+- **`precompute_toc(progress_callback, cancel_check)`** + same kwargs
+  forwarded through `precompute_toc_folder()`. The callback receives
+  `(idx, total, path, status)` after each video; `cancel_check` is
+  polled at the top of each file and short-circuits the loop with a
+  partial result dict on truthy. The internal tqdm bar is suppressed
+  when `progress_callback` is set so UI consumers (e.g. dustrack's
+  batch-process modal) own the only progress surface. 4 new tests in
   `tests/test_video_reader.py`.
 
 ## [1.5.0] - 2026-05-23

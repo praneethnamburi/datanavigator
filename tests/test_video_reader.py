@@ -492,6 +492,105 @@ def test_precompute_toc_batch_warmup(fresh_clip, tmp_path, capsys):
     assert "building TOC" not in captured.out
 
 
+# ---------- precompute_toc progress_callback + cancel_check ----------
+
+
+def test_precompute_toc_progress_callback_fires_per_file(fresh_clip, tmp_path):
+    from datanavigator import precompute_toc
+
+    alt = tmp_path / "alt_cb.mp4"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i", f"testsrc=duration=0.5:size=64x48:rate={FPS}",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "12",
+            str(alt),
+        ],
+        check=True,
+    )
+
+    calls: list[tuple] = []
+
+    def cb(idx, total, path_str, status):
+        calls.append((idx, total, Path(path_str).name, status))
+
+    results = precompute_toc([fresh_clip, alt], progress_callback=cb)
+    assert len(calls) == 2
+    assert [c[0] for c in calls] == [0, 1]
+    assert all(c[1] == 2 for c in calls)
+    # Status values come from the same map as the return dict.
+    statuses = {c[2]: c[3] for c in calls}
+    assert statuses[Path(fresh_clip).name] == results[str(fresh_clip)]
+    assert statuses[alt.name] == results[str(alt)]
+    # Fresh-built clips report "built" on the first pass.
+    assert all(s == "built" for s in statuses.values())
+
+
+def test_precompute_toc_cancel_check_aborts_between_files(fresh_clip, tmp_path):
+    from datanavigator import precompute_toc
+
+    # Build N>1 clips so we can verify the loop short-circuits.
+    clips: list[Path] = [fresh_clip]
+    for i in range(2):
+        c = tmp_path / f"cancel_{i}.mp4"
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                "-f", "lavfi", "-i", f"testsrc=duration=0.5:size=64x48:rate={FPS}",
+                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-g", "12",
+                str(c),
+            ],
+            check=True,
+        )
+        clips.append(c)
+
+    state = {"calls": 0}
+
+    def cancel_check():
+        state["calls"] += 1
+        return state["calls"] >= 2  # True on the second top-check
+
+    results = precompute_toc(clips, show_progress=False, cancel_check=cancel_check)
+    # Only the first file processed; partial dict returned.
+    assert len(results) == 1
+    assert str(clips[0]) in results
+
+
+def test_precompute_toc_callback_suppresses_tqdm(fresh_clip, capsys):
+    """When ``progress_callback`` is set, the tqdm bar is suppressed so
+    the UI consumer's own progress widget is the only thing rendering."""
+    from datanavigator import precompute_toc
+
+    calls: list[str] = []
+
+    def cb(idx, total, path_str, status):
+        calls.append(status)
+
+    precompute_toc([fresh_clip], progress_callback=cb, show_progress=True)
+    captured = capsys.readouterr()
+    # tqdm renders to stderr; "Building TOCs" desc must not appear.
+    assert "Building TOCs" not in captured.err
+    assert "Building TOCs" not in captured.out
+    assert len(calls) == 1
+
+
+def test_precompute_toc_folder_forwards_callback(tmp_path):
+    """The folder helper threads progress_callback + cancel_check through."""
+    from datanavigator import precompute_toc_folder
+
+    _make_clip(tmp_path / "a.mp4")
+    _make_clip(tmp_path / "b.mp4", duration=0.5)
+
+    calls: list[tuple] = []
+
+    def cb(idx, total, path_str, status):
+        calls.append((Path(path_str).name, status))
+
+    precompute_toc_folder(tmp_path, progress_callback=cb)
+    assert len(calls) == 2
+    assert {c[0] for c in calls} == {"a.mp4", "b.mp4"}
+
+
 # ---------- precompute_toc_folder ----------
 
 
