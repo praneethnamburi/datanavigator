@@ -2,14 +2,13 @@ r"""
 Interactive data visualization for signals, videos, and complex data objects.
 
 datanavigator provides the modality-agnostic data-navigation primitives
--- browsers, asset managers, events. The point-tracking UI
-(:class:`VideoPointAnnotator`), annotation containers
-(:class:`VideoAnnotation`, :class:`VideoAnnotations`), and Lucas-Kanade
-helpers (``lucas_kanade``, ``lucas_kanade_rstc``) used to live here too;
-in 1.5.0a1 they were relocated to the :mod:`dustrack` package alongside
-its DeepLabCut workflow. See ``dustrack.VideoPointAnnotator`` /
+-- browsers, asset managers, events. The point-tracking UI, annotation
+containers (:class:`VideoAnnotation`, :class:`VideoAnnotations`), and
+Lucas-Kanade helpers (``lucas_kanade``, ``lucas_kanade_rstc``) used to
+live here too; in 1.5.0 they were relocated to the :mod:`dustrack`
+package alongside its DeepLabCut workflow. See ``dustrack.DUSTrack`` /
 ``dustrack.VideoAnnotation`` for the new home. ``git log --follow
-dustrack/pointtracking.py`` traces the full pre-relocation history.
+dustrack/annotations.py`` traces the full pre-relocation history.
 
 Browsers
 
@@ -44,9 +43,10 @@ Assetcontainers
 - :py:class:`StateVariables`: Manager for state variables.
 - :py:class:`Events`: Manager for event objects.
 """
+
 import os
-import sys
 import shutil
+import sys
 import warnings
 
 # Suppress PySide6 6.4.x shibokensupport signature parser warnings.
@@ -66,7 +66,6 @@ warnings.filterwarnings(
 )
 
 from .__version__ import __version__
-
 from ._config import (
     get_cache_folder,
     get_clip_folder,
@@ -85,14 +84,17 @@ from .assets import (
     StateVariables,
     ToggleButton,
 )
-from .events import portion, Event, EventData, Events
-
+from .components import ComponentBrowser
 from .core import GenericBrowser
+from .events import Event, EventData, Events, portion
+from .examples import (
+    ButtonDemo,
+    EventPickerDemo,
+    SelectorDemo,
+    get_example_video,
+)
 from .plots import PlotBrowser
 from .signals import SignalBrowser
-from .videos import VideoBrowser, VideoPlotBrowser
-from .components import ComponentBrowser
-
 from .utils import (
     TextView,
     Video,
@@ -102,13 +104,7 @@ from .utils import (
     ticks_from_times,
 )
 from .video_reader import VideoReader, cpu, precompute_toc
-
-from .examples import (
-    get_example_video,
-    EventPickerDemo,
-    ButtonDemo,
-    SelectorDemo,
-)
+from .videos import VideoBrowser, VideoPlotBrowser
 
 
 def _check_ffmpeg():

@@ -1,7 +1,7 @@
 # Change Log
 All notable changes to this project will be documented in this file.
 
-## [1.5.0a1] - unreleased
+## [1.5.0] - YYYY-MM-DD
 
 Structural refactor: `pointtracking.py` (VideoPointAnnotator,
 VideoAnnotation, VideoAnnotations) and `opticalflow.py` (lucas_kanade,
@@ -80,15 +80,20 @@ deletion shows up as a single coherent commit -- the files' history
 is reachable through their new home in dustrack.
 
 ### Removed
-- `datanavigator.pointtracking` (relocated to `dustrack.pointtracking`):
-  `VideoPointAnnotator`, `VideoAnnotation`, `VideoAnnotations`,
-  `_TrackedFrameDict`. Cross-package: VPA remains a subclass of
-  `datanavigator.VideoBrowser`; asset managers, events, utils, `_qt`
-  scaffolding stay in dnav.
-- `datanavigator.opticalflow` (relocated to `dustrack.opticalflow`):
-  `lucas_kanade`, `lucas_kanade_rstc`. The frame-list siblings
-  `lucas_kanade_2` / `lucas_kanade_rstc_2` continue to live in
-  `dustrack.postprocess`.
+- `datanavigator.pointtracking` (relocated to `dustrack.annotations`
+  in dustrack 1.2.0rc1; originally landed at `dustrack.pointtracking`
+  in dustrack 1.2.0a1): `VideoAnnotation`, `VideoAnnotations`,
+  `_TrackedFrameDict`. The `VideoPointAnnotator` parent class collapsed
+  into `dustrack.DUSTrack` directly in dustrack 1.2.0rc1; use
+  `dustrack.DUSTrack` for interactive point annotation. Cross-package:
+  `dustrack.DUSTrack` still subclasses `datanavigator.videos.VideoBrowser`;
+  asset managers, events, utils, `_qt` scaffolding stay in dnav.
+- `datanavigator.opticalflow` (relocated to `dustrack.lk_opticalflow`
+  in dustrack 1.2.0rc1; originally landed at `dustrack.opticalflow` in
+  dustrack 1.2.0a1): `lucas_kanade`, `lucas_kanade_rstc`. The
+  frame-list siblings `lucas_kanade_2` / `lucas_kanade_rstc_2`
+  continue to live in `dustrack.lk_filter` (renamed from
+  `dustrack.postprocess` in 1.2.0rc1).
 
 ### Changed
 - README + `__init__.py` module docstring restated: datanavigator is
@@ -122,7 +127,7 @@ from dustrack import lucas_kanade
 ```
 
 The `datanavigator` floor in `dustrack`'s `pyproject.toml` moves to
-`>=1.5.0a1` so the two releases ship in lockstep.
+`>=1.5.0` so the two releases ship in lockstep.
 
 ### Pickle compatibility
 
@@ -136,18 +141,21 @@ register the import alias yourself before loading:
 
 ```python
 import sys
-import dustrack.pointtracking
-import dustrack.opticalflow
-sys.modules["datanavigator.pointtracking"] = dustrack.pointtracking
-sys.modules["datanavigator.opticalflow"] = dustrack.opticalflow
+import dustrack.annotations
+import dustrack.lk_opticalflow
+sys.modules["datanavigator.pointtracking"] = dustrack.annotations
+sys.modules["datanavigator.opticalflow"] = dustrack.lk_opticalflow
 
 import pickle
 with open(path, "rb") as f:
     obj = pickle.load(f)
 ```
 
-If this surfaces for multiple users, a follow-up 1.5.0a2 will fold the
-alias into `datanavigator/__init__.py` directly.
+(Note the destination module names changed in dustrack 1.2.0rc1:
+`dustrack.pointtracking` → `dustrack.annotations`,
+`dustrack.opticalflow` → `dustrack.lk_opticalflow`. If your pickle was
+captured against a dustrack 1.2.0a1/a2 install, point the aliases at
+the new homes per the snippet above.)
 
 ## [1.4.0] - 2026-05-19
 

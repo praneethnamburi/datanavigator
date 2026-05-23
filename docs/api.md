@@ -64,16 +64,12 @@ Assets that power the functionality of the `GenericBrowser` class.
     :exclude-members: ERROR_INVALID_NAME
 ```
 
-## Optical flow
-```{eval-rst}
-.. automodule:: datanavigator.opticalflow
-    :members:
-    :undoc-members:
-```
+## Point tracking + optical flow (relocated)
 
-## Point Tracking
-```{eval-rst}
-.. automodule:: datanavigator.pointtracking
-    :members:
-    :undoc-members:
-```
+The point-tracking UI, annotation containers
+(``VideoAnnotation`` / ``VideoAnnotations``), and Lucas-Kanade helpers
+(``lucas_kanade`` / ``lucas_kanade_rstc``) relocated to the
+[DUSTrack](https://dustrack.readthedocs.io) package in `1.5.0`
+alongside its DeepLabCut workflow. See
+[`dustrack.DUSTrack`](https://dustrack.readthedocs.io/en/latest/api.html)
+for the new home.
