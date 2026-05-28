@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 
 from datanavigator.signals import SignalBrowser
@@ -89,10 +90,10 @@ def test_signal_dropdown_on_by_default(signal_list, mock_figure):
     browser = SignalBrowser(plot_data=signal_list, figure_handle=mock_figure)
 
     assert browser.statevariables.names == ["signal"]
-    assert browser._signal_var is not None
-    assert browser._signal_var.widget == "dropdown"
-    assert browser._signal_var.states == ["signal 0", "signal 1", "signal 2"]
-    assert browser._signal_var._current_state_idx == browser._current_idx == 0
+    assert browser._item_var is not None
+    assert browser._item_var.widget == "dropdown"
+    assert browser._item_var.states == ["signal 0", "signal 1", "signal 2"]
+    assert browser._item_var._current_state_idx == browser._current_idx == 0
 
 
 def test_signal_dropdown_explicit_names(signal_list, mock_figure):
@@ -101,7 +102,7 @@ def test_signal_dropdown_explicit_names(signal_list, mock_figure):
     browser = SignalBrowser(
         plot_data=signal_list, figure_handle=mock_figure, signal_names=names
     )
-    assert browser._signal_var.states == names
+    assert browser._item_var.states == names
 
 
 def test_signal_dropdown_can_be_suppressed(signal_list, mock_figure):
@@ -109,19 +110,19 @@ def test_signal_dropdown_can_be_suppressed(signal_list, mock_figure):
     browser = SignalBrowser(
         plot_data=signal_list, figure_handle=mock_figure, show_signal_dropdown=False
     )
-    assert browser._signal_var is None
+    assert browser._item_var is None
     assert browser.statevariables.names == []
 
 
 def test_signal_dropdown_relabel_replaces(signal_list, mock_figure):
     """Re-calling add_signal_dropdown relabels in place (no duplicate var)."""
     browser = SignalBrowser(plot_data=signal_list, figure_handle=mock_figure)
-    assert browser._signal_var.states == ["signal 0", "signal 1", "signal 2"]
+    assert browser._item_var.states == ["signal 0", "signal 1", "signal 2"]
 
     var = browser.add_signal_dropdown(["a", "b", "c"])
     assert browser.statevariables.names == ["signal"]
     assert var.states == ["a", "b", "c"]
-    assert browser._signal_var is var
+    assert browser._item_var is var
 
 
 def test_signal_dropdown_pick_moves_index(signal_list, mock_figure):
@@ -132,11 +133,11 @@ def test_signal_dropdown_pick_moves_index(signal_list, mock_figure):
     browser = SignalBrowser(
         plot_data=signal_list, figure_handle=mock_figure, signal_names=["a", "b", "c"]
     )
-    browser._signal_var.set_state(2)
+    browser._item_var.set_state(2)
     browser.update()
     assert browser._current_idx == 2
 
-    browser._signal_var.set_state(1)
+    browser._item_var.set_state(1)
     browser.update()
     assert browser._current_idx == 1
 
@@ -146,15 +147,15 @@ def test_signal_dropdown_follows_keyboard_navigation(signal_list, mock_figure):
     browser = SignalBrowser(
         plot_data=signal_list, figure_handle=mock_figure, signal_names=["a", "b", "c"]
     )
-    assert browser._signal_var._current_state_idx == 0
+    assert browser._item_var._current_state_idx == 0
 
     browser(simulate_key_press(browser.figure, key="right"))
     assert browser._current_idx == 1
-    assert browser._signal_var._current_state_idx == 1
+    assert browser._item_var._current_state_idx == 1
 
     browser(simulate_key_press(browser.figure, key="left"))
     assert browser._current_idx == 0
-    assert browser._signal_var._current_state_idx == 0
+    assert browser._item_var._current_state_idx == 0
 
 
 def test_signal_dropdown_length_mismatch_raises(signal_list, mock_figure):
@@ -164,3 +165,23 @@ def test_signal_dropdown_length_mismatch_raises(signal_list, mock_figure):
     )
     with pytest.raises(ValueError):
         browser.add_signal_dropdown(["only", "two"])
+
+
+def test_signal_browser_handles_mixed_dimensions(mock_figure):
+    """Entries with different sub-channel counts share one pre-allocated set
+    of line handles; only the current entry's traces are visible."""
+    plot_data = [
+        np.random.rand(100),  # 1 trace
+        np.random.rand(100, 3),  # 3 traces
+        np.random.rand(100, 2),  # 2 traces
+    ]
+    browser = SignalBrowser(plot_data=plot_data, figure_handle=mock_figure)
+
+    # Pre-allocated for the widest entry (3 traces).
+    assert len(browser._plot) == 3
+
+    for idx, n_expected in enumerate([1, 3, 2]):
+        browser._current_idx = idx
+        browser.update()
+        visible = [ln for ln in browser._plot if ln.get_visible()]
+        assert len(visible) == n_expected

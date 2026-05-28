@@ -69,3 +69,32 @@ def test_plot_browser_no_setup(signal_list, figure_with_two_subplots):
     pb(event)
     assert pb._current_idx == 1
     assert np.allclose(pb.get_current_data()(), signal_list[1]())
+
+
+def test_plot_browser_item_dropdown(signal_list, figure_with_two_subplots):
+    """PlotBrowser gets an item-selection dropdown by default, two-way bound
+    to the browse index (the generic GenericBrowser.add_item_dropdown)."""
+    pb = PlotBrowser(signal_list, plotter(figure_with_two_subplots))
+    assert pb.statevariables.names == ["item"]
+    assert pb._item_var is not None
+    assert len(pb._item_var.states) == len(signal_list)
+    assert pb._item_var._current_state_idx == pb._current_idx == 0
+
+    # pick -> index (mirror the QComboBox on_pick path)
+    pb._item_var.set_state(1)
+    pb.update()
+    assert pb._current_idx == 1
+
+    # arrow-key navigation -> dropdown stays in step
+    pb(simulate_key_press(pb.figure, "left"))
+    assert pb._current_idx == 0
+    assert pb._item_var._current_state_idx == 0
+
+
+def test_plot_browser_dropdown_can_be_suppressed(signal_list, figure_with_two_subplots):
+    """show_item_dropdown=False suppresses the PlotBrowser dropdown."""
+    pb = PlotBrowser(
+        signal_list, plotter(figure_with_two_subplots), show_item_dropdown=False
+    )
+    assert pb._item_var is None
+    assert pb.statevariables.names == []

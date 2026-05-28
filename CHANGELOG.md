@@ -4,21 +4,39 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- **`SignalBrowser` signal-selection dropdown (on by default).** A sidebar
-  dropdown now lets the displayed signal be picked by name, alongside the
-  existing arrow-key navigation. It is added automatically (labels
-  auto-derived from each entry's `name`, falling back to `"signal <i>"`);
-  pass `signal_names=[...]` to label them, or `show_signal_dropdown=False`
-  to suppress it. `SignalBrowser.add_signal_dropdown(names=None,
-  var_name="signal")` is the underlying primitive and is idempotent
-  (re-calling it relabels in place). Implemented on top of the rc2
-  `StateVariable(widget="dropdown")` machinery (a `QComboBox` on Qt;
-  read-only text fallback on non-Qt backends). The dropdown is two-way
-  bound to `_current_idx`: picking an entry moves the browse index, and
-  arrow-key navigation keeps the dropdown in step (`SignalBrowser.update`
-  now routes through the inherited `update_assets()` seam it previously
-  skipped). 7 new tests in `tests/test_signals.py`. Lands the
-  datanavigator-core half of delsys's per-signal noise-marking review tool.
+- **Item-selection dropdown on `GenericBrowser` (on by default for signal +
+  plot browsers).** A sidebar dropdown now lets the displayed item be picked
+  by name, alongside arrow-key navigation.
+  `GenericBrowser.add_item_dropdown(names=None, var_name="item")` is the
+  generic primitive — two-way bound to `_current_idx` (a pick moves the
+  browse index via a `StateVariable` on-change callback; arrow-key
+  navigation keeps the dropdown in step via `_sync_item_dropdown`, invoked
+  from `update_assets()`, which every browser's `update` already routes
+  through). Built on the rc2 `StateVariable(widget="dropdown")` machinery (a
+  `QComboBox` on Qt; read-only text fallback on non-Qt). Labels default to
+  each item's `name` (falling back to `"item <i>"`, overridable via
+  `_default_item_names`); idempotent re-labeling.
+  - `SignalBrowser`: dropdown on by default (`var_name="signal"`, `"signal
+    <i>"` fallback). `signal_names=[...]` labels it, `show_signal_dropdown=
+    False` suppresses it; `add_signal_dropdown(...)` is a thin wrapper.
+    `SignalBrowser.update` now routes through the inherited `update_assets()`
+    seam it previously skipped (also fixes memoryslots/events overlays not
+    refreshing on nav).
+  - `PlotBrowser`: dropdown on by default for a direct `PlotBrowser`
+    (`item_names=[...]`, `show_item_dropdown=False`); subclasses are skipped
+    so they can add their own. The destructive no-`setup_func` redraw path
+    re-shows the control after `figure.clear()`.
+  - Video browsers deliberately leave it off (frame scrubbing, not a
+    bounded named list).
+  10 new tests across `tests/test_signals.py` / `tests/test_plots.py`.
+  Lands the datanavigator-core half of delsys's per-signal noise-marking
+  review tool.
+- **`SignalBrowser` handles entries of differing sub-channel counts.** Line
+  handles are now pre-allocated for the widest entry (max sub-channels
+  across `plot_data`) and shown/hidden per entry, so switching between, e.g.,
+  a 1-channel EMG and a 3-axis accelerometer no longer leaves stale or
+  missing traces. Non-pysampled entries accept 2-D arrays (one trace per
+  column) in addition to 1-D.
 - **`precompute_toc_folder(folder, *, extensions, recursive, force, show_progress)`**
   — folder-walking sibling of `precompute_toc()`. Accepts a directory,
   a file path, or an iterable mixing both; directories are walked

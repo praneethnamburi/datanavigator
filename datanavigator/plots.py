@@ -29,6 +29,8 @@ class PlotBrowser(GenericBrowser):
         plot_data: list,
         plot_func: tuple[callable, callable] | callable,
         figure_handle: plt.Figure = None,
+        item_names: list[str] | None = None,
+        show_item_dropdown: bool = True,
         **plot_kwargs,
     ):
         """
@@ -52,6 +54,16 @@ class PlotBrowser(GenericBrowser):
                     output of the setup_func if it exists, or a figure handle on which to plot
                     keyword arguments
             figure_handle (plt.Figure, optional): Matplotlib figure handle. Defaults to None. Ideally, this is handled by the setup function.
+            item_names (list[str], optional): One display label per
+                ``plot_data`` entry for the sidebar dropdown (see
+                :meth:`~datanavigator.core.GenericBrowser.add_item_dropdown`).
+                Defaults to None -- labels are auto-derived from each entry's
+                ``name`` attribute (falling back to ``"item <i>"``). Only
+                applied to a direct ``PlotBrowser`` (subclasses add their own
+                dropdown).
+            show_item_dropdown (bool, optional): Whether to add the
+                item-selection dropdown. Defaults to True; pass False to
+                suppress it.
             **plot_kwargs: Additional keyword arguments to pass to the plotting function.
         """
         self.data = plot_data  # list where each element serves as input to plot_func
@@ -86,6 +98,11 @@ class PlotBrowser(GenericBrowser):
             self.update()
             self.reset_axes()
             plt.show(block=False)
+            # Default-on item dropdown for a direct PlotBrowser. Subclasses
+            # are skipped (the __class__ guard) so they can add their own
+            # dropdown with domain-specific labels once their data is ready.
+            if show_item_dropdown:
+                self.add_item_dropdown(item_names)
 
         # add selectors after drawing!
         if self.plot_handles is not None:
@@ -115,6 +132,10 @@ class PlotBrowser(GenericBrowser):
         if self.setup_func is None:
             self.figure.clear()  # redraw the entire figure contents each time, NOT recommended
             self.memoryslots.show()
+            if self.has("statevariables"):
+                # The destructive figure.clear() above wipes the dropdown's
+                # non-Qt sidebar control too; re-show it (mirrors memoryslots).
+                self.statevariables.show()
             self.plot_func(self.get_current_data(), self.figure, **self.plot_kwargs)
         else:
             self.memoryslots.update_display()

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable, Optional
 
+import numpy as np
 import pysampled
 from matplotlib import pyplot as plt
 
@@ -54,14 +55,17 @@ class SignalBrowser(GenericBrowser):
         """
         super().__init__(figure_handle)
 
-        self._ax = self.figure.subplots(1, 1)
-        this_data = plot_data[0]
-        if isinstance(this_data, pysampled.Data):
-            self._plot = self._ax.plot(this_data.t, this_data())
-        else:
-            (self._plot,) = self._ax.plot(this_data)
-
         self.data = plot_data
+        self._ax = self.figure.subplots(1, 1)
+        # Pre-allocate the maximum number of 1-D traces across all entries,
+        # then show only as many as the current entry needs (hiding the
+        # rest). This lets entries with different sub-channel counts share
+        # one stable set of Line2D handles -- no handle churn (and no color
+        # reshuffle) when switching between, say, a 1-channel EMG and a
+        # 3-axis accelerometer signal.
+        self._n_traces_max = max(self._n_traces(d) for d in plot_data)
+        self._plot = [self._ax.plot([], [])[0] for _ in range(self._n_traces_max)]
+
         if titlefunc is None:
             self.titlefunc = lambda s: getattr(
                 s.data[s._current_idx], "name", f"Plot number {s._current_idx}"
@@ -70,10 +74,6 @@ class SignalBrowser(GenericBrowser):
             self.titlefunc = titlefunc
 
         self.reset_on_change = reset_on_change
-        # The optional signal-selection dropdown's StateVariable; None until
-        # add_signal_dropdown() runs. Set before the first update() so the
-        # navigation<->dropdown sync in update() can no-op safely.
-        self._signal_var: Optional["StateVariable"] = None
         # initialize
         self.set_default_keybindings()
         self.buttons.add(
@@ -94,28 +94,25 @@ class SignalBrowser(GenericBrowser):
         Args:
             event (optional): Event that triggered the update. Defaults to None.
         """
-        this_data = self.data[self._current_idx]
-        if isinstance(this_data, pysampled.Data):
-            data_to_plot = this_data.split_to_1d()
-            for plot_handle, this_data_to_plot in zip(self._plot, data_to_plot):
-                plot_handle.set_data(this_data_to_plot.t, this_data_to_plot())
-        else:
-            self._plot.set_ydata(this_data)
+        traces = self._as_traces(self.data[self._current_idx])
+        for i, line in enumerate(self._plot):
+            if i < len(traces):
+                x, y = traces[i]
+                line.set_data(x, y)
+                line.set_visible(True)
+            else:
+                # Surplus pre-allocated handle: blank + hide it so a signal
+                # with fewer sub-channels than the maximum doesn't show
+                # stale data from a previously-displayed wider signal.
+                line.set_data([], [])
+                line.set_visible(False)
         self._ax.set_title(self.titlefunc(self))
         if "Auto limits" in self.buttons and self.buttons["Auto limits"].state:  # is True
             self.reset_axes()
-        # Keep the signal dropdown (if present) in step with arrow-key
-        # navigation: push _current_idx into the state var directly --
-        # bypassing _on_signal_var_change, which handles only the reverse
-        # (dropdown-pick -> index) direction -- then let update_assets
-        # refresh the sidebar control. update_assets() is the GenericBrowser
-        # seam SignalBrowser.update historically skipped; it no-ops for
-        # assets that were never shown.
-        if (
-            self._signal_var is not None
-            and self._signal_var._current_state_idx != self._current_idx
-        ):
-            self._signal_var._current_state_idx = self._current_idx
+        # update_assets() (the GenericBrowser seam SignalBrowser.update used
+        # to skip) keeps the signal dropdown in step with arrow-key
+        # navigation via GenericBrowser._sync_item_dropdown, and refreshes
+        # any other shown assets. No-ops for assets that were never shown.
         self.update_assets()
         plt.draw()
 
@@ -124,68 +121,43 @@ class SignalBrowser(GenericBrowser):
         names: Optional[list[str]] = None,
         var_name: str = "signal",
     ) -> "StateVariable":
-        """Add a sidebar dropdown that jumps straight to a signal by name.
+        """Add the signal-selection dropdown (a thin wrapper).
 
-        A convenience over arrow-key navigation: the browser is handed one
-        label per entry in ``self.data`` and renders them as a ``QComboBox``
-        in the Qt sidebar (a :class:`~datanavigator.assets.StateVariable`
-        with ``widget="dropdown"``). Picking an entry sets
-        :attr:`_current_idx` and redraws; arrow-key navigation keeps the
-        dropdown in step (see :meth:`update`).
-
-        Calling this again with the same ``var_name`` replaces the existing
-        dropdown -- so the default dropdown built at construction can be
-        relabeled later (e.g. once signal addresses are known).
-
-        Args:
-            names: one display label per ``self.data`` entry. ``None``
-                derives them from each entry's ``name`` attribute, falling
-                back to ``"signal <i>"``. Length must match ``len(self.data)``.
-            var_name: the state-variable name (the dropdown's row label).
-
-        Returns:
-            The registered :class:`StateVariable`.
-
-        On non-Qt backends the control degrades to the read-only
-        state-variables text path, but the index binding still works.
+        Delegates to :meth:`GenericBrowser.add_item_dropdown` with a
+        ``"signal"`` row label. ``names=None`` derives labels from each
+        entry's ``name`` (falling back to ``"signal <i>"`` via
+        :meth:`_default_item_names`). See :meth:`add_item_dropdown` for the
+        full contract: idempotent relabeling, Qt vs text rendering, and the
+        two-way ``_current_idx`` binding.
         """
-        if names is None:
-            names = [
-                getattr(d, "name", None) or f"signal {i}" for i, d in enumerate(self.data)
-            ]
-        if len(names) != len(self.data):
-            raise ValueError(
-                f"add_signal_dropdown: got {len(names)} names for "
-                f"{len(self.data)} signals; lengths must match."
-            )
-        names = [str(n) for n in names]
+        return self.add_item_dropdown(names, var_name=var_name)
 
-        # Idempotent: drop any prior dropdown of this name (e.g. the default
-        # one from __init__) so a follow-up call relabels rather than raising
-        # on the duplicate state-variable name.
-        if var_name in self.statevariables:
-            self.statevariables.remove(var_name)
+    def _default_item_names(self) -> list[str]:
+        """Signal-flavored default dropdown labels (``"signal <i>"`` fallback)."""
+        return [
+            getattr(d, "name", None) or f"signal {i}" for i, d in enumerate(self.data)
+        ]
 
-        var = self.statevariables.add(var_name, names, widget="dropdown")
-        # Mirror the current browse position into the dropdown, then wire
-        # pick -> index. Direct index assignment bypasses the on-change
-        # callback (not registered yet, and the value already matches).
-        var._current_state_idx = self._current_idx
-        var.add_on_change(self._on_signal_var_change)
-        self._signal_var = var
+    @staticmethod
+    def _n_traces(data) -> int:
+        """Number of 1-D traces a single ``data`` entry renders as."""
+        if isinstance(data, pysampled.Data):
+            return len(data.split_to_1d())
+        arr = np.asarray(data)
+        return 1 if arr.ndim == 1 else arr.shape[1]
 
-        # Mount/refresh the sidebar control (QComboBox on Qt; TextView fallback).
-        self.statevariables.show()
-        return var
+    @staticmethod
+    def _as_traces(data) -> list[tuple]:
+        """Decompose a ``data`` entry into a list of ``(x, y)`` 1-D traces.
 
-    def _on_signal_var_change(self) -> None:
-        """Mirror a dropdown pick into the browse index.
-
-        Fired by :meth:`StateVariable.set_state` from the QComboBox
-        ``on_pick`` handler (which then calls :meth:`update` itself), so we
-        only move the index here -- no redraw. Keyboard navigation takes the
-        reverse path: :meth:`update` writes ``_current_state_idx`` directly,
-        bypassing this callback.
+        Keeps :meth:`_n_traces` and :meth:`update` in agreement: pysampled
+        signals split per channel (time as x); a 1-D array/list is a single
+        index-vs-value trace; a 2-D array is one trace per column.
         """
-        if self._signal_var is not None:
-            self._current_idx = self._signal_var._current_state_idx
+        if isinstance(data, pysampled.Data):
+            return [(d.t, d()) for d in data.split_to_1d()]
+        arr = np.asarray(data)
+        if arr.ndim == 1:
+            return [(np.arange(len(arr)), arr)]
+        x = np.arange(arr.shape[0])
+        return [(x, arr[:, j]) for j in range(arr.shape[1])]

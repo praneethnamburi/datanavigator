@@ -12,7 +12,7 @@ from __future__ import annotations
 import inspect
 import io
 from dataclasses import dataclass
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional
 
 import matplotlib as mpl
 from matplotlib import axes as maxes
@@ -21,6 +21,9 @@ from matplotlib import pyplot as plt
 from ._qt import find_qt_window
 from .assets import Buttons, MemorySlots, Selectors, StateVariables
 from .events import Events
+
+if TYPE_CHECKING:
+    from .assets import StateVariable
 
 
 @dataclass
@@ -149,6 +152,10 @@ class GenericBrowser:
         self.memoryslots = MemorySlots(parent=self)
         self.statevariables = StateVariables(parent=self)
         self.events = Events(parent=self)
+        # StateVariable backing the optional item-selection dropdown
+        # (add_item_dropdown); None until one is added. Set here so the
+        # update_assets() sync no-ops before any dropdown exists.
+        self._item_var: Optional["StateVariable"] = None
 
         # for cleanup
         self.cid = []
@@ -157,6 +164,7 @@ class GenericBrowser:
 
     def update_assets(self):
         """Update the display of various assets."""
+        self._sync_item_dropdown()
         if self.has("memoryslots"):
             self.memoryslots.update_display()
         if self.has("events"):
@@ -181,6 +189,96 @@ class GenericBrowser:
             event (optional): Event that triggered the update. Defaults to None.
         """
         self.update_assets()
+
+    def add_item_dropdown(
+        self,
+        names: Optional[list[str]] = None,
+        var_name: str = "item",
+    ) -> "StateVariable":
+        """Add a sidebar dropdown to jump straight to a browsed item by name.
+
+        Generic across browsers: the dropdown is two-way bound to
+        :attr:`_current_idx`. Picking an entry moves the browse index and
+        redraws; arrow-key navigation keeps the dropdown in step (see
+        :meth:`_sync_item_dropdown`, invoked from :meth:`update_assets`).
+        Built on the ``StateVariable(widget="dropdown")`` machinery -- a
+        ``QComboBox`` on Qt, read-only text fallback on non-Qt backends.
+
+        Suited to browsing tens-to-hundreds of named items (signals, plot
+        items); not to scrubbing thousands of video frames, which is why
+        the video browsers leave it off.
+
+        Idempotent: re-calling with the same ``var_name`` replaces the
+        existing dropdown (e.g. to relabel once the items are known).
+
+        Args:
+            names: one label per browsed item. ``None`` ->
+                :meth:`_default_item_names`. Length must match ``len(self)``.
+            var_name: the state-variable name (the dropdown's row label).
+
+        Returns:
+            The registered :class:`~datanavigator.assets.StateVariable`.
+        """
+        if names is None:
+            names = self._default_item_names()
+        if len(names) != len(self):
+            raise ValueError(
+                f"add_item_dropdown: got {len(names)} names for "
+                f"{len(self)} items; lengths must match."
+            )
+        names = [str(n) for n in names]
+
+        # Idempotent: drop any prior dropdown of this name so a follow-up
+        # call relabels rather than raising on the duplicate state-var name.
+        if var_name in self.statevariables:
+            self.statevariables.remove(var_name)
+
+        var = self.statevariables.add(var_name, names, widget="dropdown")
+        # Mirror the current browse position into the dropdown, then wire
+        # pick -> index. Direct index assignment bypasses the on-change
+        # callback (not registered yet, and the value already matches).
+        var._current_state_idx = self._current_idx
+        var.add_on_change(self._on_item_var_change)
+        self._item_var = var
+
+        # Mount/refresh the sidebar control (QComboBox on Qt; TextView fallback).
+        self.statevariables.show()
+        return var
+
+    def _default_item_names(self) -> list[str]:
+        """Default per-item dropdown labels.
+
+        Derives one label per browsed item from its ``name`` attribute,
+        falling back to ``"item <i>"``. Subclasses override to supply
+        domain-specific labels (e.g. :class:`~datanavigator.signals.SignalBrowser`).
+        """
+        return [
+            getattr(self.data[i], "name", None) or f"item {i}" for i in range(len(self))
+        ]
+
+    def _on_item_var_change(self) -> None:
+        """Mirror an item-dropdown pick into the browse index.
+
+        Fired by :meth:`~datanavigator.assets.StateVariable.set_state` from
+        the QComboBox ``on_pick`` handler (which then calls :meth:`update`
+        itself), so we only move the index here -- no redraw. Keyboard
+        navigation takes the reverse path via :meth:`_sync_item_dropdown`.
+        """
+        if self._item_var is not None:
+            self._current_idx = self._item_var._current_state_idx
+
+    def _sync_item_dropdown(self) -> None:
+        """Align the item dropdown's selected index with ``_current_idx``.
+
+        Called at the top of :meth:`update_assets` (which every browser's
+        ``update`` routes through), so arrow-key navigation moves the
+        dropdown selection. Writes ``_current_state_idx`` directly,
+        bypassing :meth:`_on_item_var_change` (the reverse direction).
+        No-ops when no dropdown has been added.
+        """
+        var = self._item_var
+        if var is not None and var._current_state_idx != self._current_idx:
+            var._current_state_idx = self._current_idx
 
     def mpl_remove_bindings(self, key_list: list[str]):
         """
