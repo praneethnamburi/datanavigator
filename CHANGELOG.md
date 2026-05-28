@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **`SignalBrowser` signal-selection dropdown (on by default).** A sidebar
+  dropdown now lets the displayed signal be picked by name, alongside the
+  existing arrow-key navigation. It is added automatically (labels
+  auto-derived from each entry's `name`, falling back to `"signal <i>"`);
+  pass `signal_names=[...]` to label them, or `show_signal_dropdown=False`
+  to suppress it. `SignalBrowser.add_signal_dropdown(names=None,
+  var_name="signal")` is the underlying primitive and is idempotent
+  (re-calling it relabels in place). Implemented on top of the rc2
+  `StateVariable(widget="dropdown")` machinery (a `QComboBox` on Qt;
+  read-only text fallback on non-Qt backends). The dropdown is two-way
+  bound to `_current_idx`: picking an entry moves the browse index, and
+  arrow-key navigation keeps the dropdown in step (`SignalBrowser.update`
+  now routes through the inherited `update_assets()` seam it previously
+  skipped). 7 new tests in `tests/test_signals.py`. Lands the
+  datanavigator-core half of delsys's per-signal noise-marking review tool.
 - **`precompute_toc_folder(folder, *, extensions, recursive, force, show_progress)`**
   — folder-walking sibling of `precompute_toc()`. Accepts a directory,
   a file path, or an iterable mixing both; directories are walked
