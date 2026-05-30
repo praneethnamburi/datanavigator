@@ -57,6 +57,15 @@ All notable changes to this project will be documented in this file.
   batch-process modal) own the only progress surface. 4 new tests in
   `tests/test_video_reader.py`.
 
+### Fixed
+- **`Event.remove()` no longer crashes when the remove click lands away from
+  every marker.** A remove click (e.g. the StepReviewer `1` key) beyond
+  `win_remove` of the nearest event left `sequence = None` and hit
+  `assert sequence is not None`; it is now a graceful no-op (the assert wrongly
+  assumed a marker is always in range — `sequence is None` post-branch occurs
+  iff the nearest marker is out of range). Regression test
+  `test_event_remove_far_from_marker_is_noop`.
+
 ## [1.5.0] - 2026-05-23
 
 Structural refactor: `pointtracking.py` (VideoPointAnnotator,

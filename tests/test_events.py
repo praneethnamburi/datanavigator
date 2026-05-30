@@ -244,6 +244,33 @@ def test_event_add_remove(matplotlib_figure, event_file_path):
     assert event.to_dict() == {"test_id": []}
 
 
+def test_event_remove_far_from_marker_is_noop(matplotlib_figure, event_file_path):
+    """Pressing remove at a valid in-axis position that is far (beyond
+    win_remove) from every marker is a no-op, not an AssertionError. Regression
+    for the StepReviewer/RRReviewer crash on a remove click away from any event.
+    (xdata=-0.1/2.2 fall outside the axes -> xdata=None -> the early return; this
+    exercises a real in-axis click, which is the path that used to assert.)"""
+    data_id_func = lambda: "test_id"
+
+    # default-only (the StepReviewer case: detected steps live in `default`)
+    event = Event(name="test_event", size=2, pick_action="overwrite",
+                  fname=event_file_path, data_id_func=data_id_func)
+    event._data["test_id"] = EventData(default=[[0.8, 0.85]])
+    before = event.to_dict()
+    event.remove(simulate_mouse_click(matplotlib_figure, xdata=0.4))  # ~0.4 away (win_remove=0.1)
+    assert event.to_dict() == before
+    assert event._data["test_id"].default == [[0.8, 0.85]]
+    assert event._data["test_id"].removed == []
+
+    # both default + added present (the first/most complex branch of remove())
+    event = Event(name="test_event", size=2, pick_action="append",
+                  fname=event_file_path, data_id_func=data_id_func)
+    event._data["test_id"] = EventData(default=[[0.2, 0.25]], added=[[0.8, 0.85]])
+    before = event.to_dict()
+    event.remove(simulate_mouse_click(matplotlib_figure, xdata=0.5))  # far from both
+    assert event.to_dict() == before
+
+
 def test_event_get_current_event_times(event_file_path):
     event = Event(
         name="test_event", size=2, fname=event_file_path, pick_action="overwrite"

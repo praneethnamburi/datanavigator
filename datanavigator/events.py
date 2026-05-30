@@ -531,7 +531,10 @@ class Event:
         else:  # both are empty
             return
 
-        assert sequence is not None
+        if sequence is None:
+            # The click landed outside win_remove of every event (default and
+            # added) -> there is nothing to remove. No-op rather than crash.
+            return
 
         assert _removed is not _deleted
         # removed moves data from default (i.e. auto-detected) to removed, and delete expunges a manually added event
