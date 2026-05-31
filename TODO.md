@@ -172,6 +172,26 @@ this branch.
   intentional); decide the matplotlib floor for this branch.
   Pair with the floor question that's already pending for the
   Qt rework.
+- **`reset_axes` hard-codes autoscale -- no hook for browser-supplied
+  limits (tackle before the next release).** `reset_axes` (the `r`
+  key + the init call) always `relim()` + `autoscale()`. A browser
+  that wants *explicit / robust* per-view limits has no clean way in:
+  it must **override `reset_axes` wholesale** (which then loses the
+  collection-walk + SubplotBase handling above). Two real cases hit
+  this in `pn-projects/projects/walking/review.py`: (a) annotation
+  spans drawn with `axvspan` (axes-fraction y) pin autoscale to the
+  current ylim, so it sticks/accumulates across items; and (b) a
+  spiky per-beat RMSSD trace whose `max()` blows the axis up, where
+  the meaningful frame is a robust statistic, not the data extent.
+  The walking reviewers worked around it by (1) a non-polluting
+  `Polygon`-via-`add_artist` span helper and (2) overriding
+  `reset_axes` to re-apply explicit limits. Proposal: give
+  `reset_axes` a delegation hook -- e.g. an optional
+  `fit_view()` / `_reset_limits` callback (or a per-axes
+  "autoscale vs explicit" policy) -- so `r` / init can call the
+  browser's limit function instead of forcing autoscale, and
+  annotations can be marked non-autoscaling. Would let the walking
+  reviewers drop both workarounds.
 
 ## Nice-to-have
 
