@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Canonical modal overlays — `datanavigator.confirm()` + `prompt_text()`**
+  (`datanavigator._modals`). The house modal style: a dark, translucent,
+  *blocking* `QFrame` parented to the figure's `QMainWindow`, covering it (so
+  clicks can't reach the canvas) with role-styled buttons
+  (`primary`/`destructive`/`neutral`) and a severity-tinted title. Promoted from
+  DUSTrack's bespoke `ConfirmOverlay` so every browser shares one modal vocabulary.
+  - `confirm(figure, *, title, message, buttons, default=None, severity="info")`
+    returns the clicked button's label; `prompt_text(figure, *, title, prompt="",
+    default="")` returns the entered text on OK (empty rejected) or `None` on Cancel.
+  - Both resolve the window via `find_qt_window` and **no-op off-Qt** — returning
+    the supplied `default` without blocking, so headless/Agg callers are safe.
+    qtpy is imported lazily in the class factories; shared backdrop/reposition/
+    `exec_` scaffolding lives in `_ModalOverlayBase`.
 - **Item-selection dropdown on `GenericBrowser` (on by default for signal +
   plot browsers).** A sidebar dropdown now lets the displayed item be picked
   by name, alongside arrow-key navigation.

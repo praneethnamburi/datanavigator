@@ -95,6 +95,7 @@ from .examples import (
 )
 from .plots import PlotBrowser
 from .signals import SignalBrowser
+from ._modals import confirm, prompt_text
 from .utils import (
     TextView,
     Video,
@@ -172,6 +173,9 @@ __all__ = [
     "ToggleButton",
     "Selector",
     "StateVariable",
+    # Modal overlays
+    "confirm",
+    "prompt_text",
     # Asset containers
     "AssetContainer",
     "Buttons",
