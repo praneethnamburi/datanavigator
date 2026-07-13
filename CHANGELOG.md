@@ -3,6 +3,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-07-13
+
+Patch release cutting the accumulated post-1.5.0 work: canonical modal
+overlays, the item-selection dropdown, mixed-sub-channel `SignalBrowser`
+support, and the folder-walking TOC pre-builder that `dustrack.batch`
+depends on (so dustrack 1.3.0 can move its floor to `>=1.5.1`).
+
 ### Added
 - **Canonical modal overlays — `datanavigator.confirm()` + `prompt_text()`**
   (`datanavigator._modals`). The house modal style: a dark, translucent,
@@ -78,6 +85,13 @@ All notable changes to this project will be documented in this file.
   assumed a marker is always in range — `sequence is None` post-branch occurs
   iff the nearest marker is out of range). Regression test
   `test_event_remove_far_from_marker_is_noop`.
+- **`is_video()` no longer raises on a `Path` argument under OpenCV < 4.8.**
+  `utils.is_video` passed `vid_file` straight to `cv2.VideoCapture`, whose
+  binding on OpenCV 4.7.x rejects `os.PathLike` (raising `cv2.error` instead
+  of returning an unopened capture). It now coerces to `str` first, so the
+  "not a video" path returns `False` on every OpenCV version. Surfaced by the
+  pre-existing `test_is_video` case (Path-typed non-video) on a pinned-4.7.0
+  env; CI, on unpinned OpenCV, was already green.
 
 ## [1.5.0] - 2026-05-23
 

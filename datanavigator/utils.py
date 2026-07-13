@@ -324,7 +324,9 @@ def is_video(vid_file: str):
     if vid_file is None or not os.path.exists(vid_file):
         return False
 
-    cap = cv.VideoCapture(vid_file)
+    # Coerce Path -> str: cv2's VideoCapture binding on OpenCV < 4.8
+    # rejects os.PathLike (raises instead of returning an unopened cap).
+    cap = cv.VideoCapture(str(vid_file))
     if cap.isOpened():
         ret, _ = cap.read()
         cap.release()
