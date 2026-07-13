@@ -215,7 +215,12 @@ class Event:
         if isinstance(color, int):
             color = PLOT_COLORS[color]
         elif color == "random":
-            color = np.random.choice(PLOT_COLORS)
+            # Index-based pick is shape-agnostic: PLOT_COLORS may be a 1-D
+            # list of hex strings or a 2-D array of RGB(A) tuples depending on
+            # the active matplotlib style. np.random.choice rejects the 2-D
+            # form ("a must be 1-dimensional"), which broke CI on styles that
+            # yield tuples.
+            color = PLOT_COLORS[np.random.randint(len(PLOT_COLORS))]
         self.color = color
         assert pick_action in ("overwrite", "append")
         self.pick_action = pick_action

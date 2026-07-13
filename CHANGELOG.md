@@ -3,6 +3,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.5.2] - 2026-07-13
+
+### Fixed
+- **`Event(color="random")` no longer raises on matplotlib color cycles made
+  of RGB(A) tuples.** `events.py` picked a random color with
+  `np.random.choice(PLOT_COLORS)`, which requires a 1-D array. When the active
+  matplotlib style yields the color cycle as tuples (2-D once coerced by
+  numpy), this raised `ValueError: a must be 1-dimensional`, breaking `Event`
+  construction (and every `Event.from_data` / `add_from_file` path through it).
+  Surfaced in CI after a matplotlib/style dependency update — local envs whose
+  cycle is hex strings (1-D) were unaffected. Now selects by random index
+  (`PLOT_COLORS[np.random.randint(len(PLOT_COLORS))]`), which is shape-agnostic.
+
 ## [1.5.1] - 2026-07-13
 
 Patch release cutting the accumulated post-1.5.0 work: canonical modal
